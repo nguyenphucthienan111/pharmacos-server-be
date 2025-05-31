@@ -15,7 +15,7 @@ const options = {
         description: "Production server",
       },
       {
-        url: "http://localhost:10000",
+        url: "http://localhost:3000",
         description: "Local server",
       },
     ],
