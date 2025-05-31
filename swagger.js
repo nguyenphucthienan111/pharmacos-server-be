@@ -11,7 +11,12 @@ const options = {
     },
     servers: [
       {
-        url: "http://localhost:5000", // Thay đổi nếu deploy lên server thật
+        url: "https://pharmacos-server-be.onrender.com",
+        description: "Production server",
+      },
+      {
+        url: "http://localhost:10000",
+        description: "Local server",
       },
     ],
   },
