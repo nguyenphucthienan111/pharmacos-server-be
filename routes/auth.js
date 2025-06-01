@@ -100,6 +100,7 @@ router.post("/register", async (req, res) => {
     const account = new Account({
       username,
       password,
+      email,
       role: "customer",
       isVerified: false,
       verificationToken,

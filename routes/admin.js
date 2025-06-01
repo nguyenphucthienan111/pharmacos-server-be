@@ -428,6 +428,7 @@ router.post("/staff", async (req, res) => {
       staffAccount = await Account.create({
         username,
         password,
+        email,
         role: "staff",
         isVerified: true, // Staff accounts are pre-verified
         status: "active",
