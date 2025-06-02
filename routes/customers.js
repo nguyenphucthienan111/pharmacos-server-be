@@ -74,8 +74,8 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
 /**
  * @swagger
  * /api/customers/profile:
- *   put:
- *     summary: Update customer profile
+ *   patch:
+ *     summary: Update customer profile (partial update)
  *     tags: [Customers]
  *     security:
  *       - bearerAuth: []
@@ -99,17 +99,18 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
  *       404:
  *         description: Customer not found
  */
-router.put("/profile", authorize(["customer"]), async (req, res) => {
+router.patch("/profile", authorize(["customer"]), async (req, res) => {
   try {
+    const updateFields = {};
     const { name, gender, dateOfBirth } = req.body;
+
+    if (name !== undefined) updateFields.name = name;
+    if (gender !== undefined) updateFields.gender = gender;
+    if (dateOfBirth !== undefined) updateFields.dateOfBirth = dateOfBirth;
 
     const customer = await Customer.findByIdAndUpdate(
       req.user.profileId,
-      {
-        name,
-        gender,
-        dateOfBirth,
-      },
+      updateFields,
       { new: true }
     ).select("-accountId");
 
@@ -226,9 +227,8 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
 
-    // Update password
-    const salt = await bcrypt.genSalt(10);
-    account.password = await bcrypt.hash(newPassword, salt);
+    // Update password - let the pre-save hook handle hashing
+    account.password = newPassword;
     await account.save();
 
     res.json({ message: "Password changed successfully" });
