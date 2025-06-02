@@ -5,8 +5,6 @@ const Order = require("../models/Order");
 const Account = require("../models/Account");
 const SaleStaff = require("../models/SaleStaff");
 const bcrypt = require("bcryptjs");
-const Brand = require("../models/Brand");
-const Category = require("../models/Category");
 const { authorize } = require("../middleware/auth");
 
 // Ensure all routes require staff role
@@ -23,9 +21,7 @@ router.use(authorize(["staff"]));
  */
 router.get("/products", async (req, res) => {
   try {
-    const products = await Product.find()
-      .populate("brandId", "name")
-      .populate("categoryId", "name");
+    const products = await Product.find();
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -235,7 +231,7 @@ router.get("/analytics/products", async (req, res) => {
   try {
     const lowStockProducts = await Product.find({
       stockQuantity: { $lt: 10 },
-    }).populate("brandId", "name");
+    });
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -267,7 +263,7 @@ router.get("/analytics/products", async (req, res) => {
     const soldProductIds = productSales.map((p) => p._id);
     const noSalesProducts = await Product.find({
       _id: { $nin: soldProductIds },
-    }).populate("brandId", "name");
+    });
 
     res.json({
       lowStockProducts,
@@ -467,154 +463,6 @@ router.put("/change-password", async (req, res) => {
     await account.save();
 
     res.json({ message: "Password changed successfully" });
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
- * /api/staff/brands:
- *   get:
- *     summary: Get all brands
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of all brands
- */
-router.get("/brands", async (req, res) => {
-  try {
-    const brands = await Brand.find().sort({ name: 1 });
-    res.json(brands);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
- * /api/staff/brands:
- *   post:
- *     summary: Create new brand
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *               discountRules:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     percentage:
- *                       type: number
- *                     minPurchase:
- *                       type: number
- *     responses:
- *       201:
- *         description: Brand created successfully
- */
-router.post("/brands", async (req, res) => {
-  try {
-    const { name, discountRules = [] } = req.body;
-
-    // Check if brand name exists
-    const existingBrand = await Brand.findOne({
-      name: { $regex: new RegExp(`^${name}$`, "i") },
-    });
-    if (existingBrand) {
-      return res.status(400).json({ message: "Brand name already exists" });
-    }
-
-    const brand = new Brand({ name, discountRules });
-    const newBrand = await brand.save();
-    res.status(201).json(newBrand);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
- * /api/staff/categories:
- *   get:
- *     summary: Get all categories
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of all categories
- */
-router.get("/categories", async (req, res) => {
-  try {
-    const categories = await Category.find().sort({ name: 1 });
-    res.json(categories);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
- * /api/staff/categories:
- *   post:
- *     summary: Create new category
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *               promotionRules:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     name:
- *                       type: string
- *                     discountRate:
- *                       type: number
- *                     minQuantity:
- *                       type: number
- *     responses:
- *       201:
- *         description: Category created successfully
- */
-router.post("/categories", async (req, res) => {
-  try {
-    const { name, promotionRules = [] } = req.body;
-
-    // Check if category name exists
-    const existingCategory = await Category.findOne({
-      name: { $regex: new RegExp(`^${name}$`, "i") },
-    });
-    if (existingCategory) {
-      return res.status(400).json({ message: "Category name already exists" });
-    }
-
-    const category = new Category({ name, promotionRules });
-    const newCategory = await category.save();
-    res.status(201).json(newCategory);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

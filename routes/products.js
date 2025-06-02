@@ -12,29 +12,49 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *       type: object
  *       required:
  *         - name
- *         - function
- *         - skinGroup
- *         - brandId
- *         - categoryId
+ *         - description
+ *         - benefits
+ *         - skinType
+ *         - size
+ *         - category
+ *         - brand
  *         - price
  *       properties:
  *         name:
  *           type: string
- *         function:
+ *         description:
  *           type: string
- *           enum: [lotion, wash, cream, serum, mask, other]
- *         skinGroup:
+ *           description: Detailed product description
+ *         benefits:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: List of product benefits and effects
+ *         skinType:
+ *           type: array
+ *           items:
+ *             type: string
+ *             enum: [oily, dry, combination, sensitive, normal, all]
+ *           description: List of suitable skin types
+ *         size:
  *           type: string
- *           enum: [oily, dry, combination, sensitive, normal]
+ *           description: Product size/volume (e.g., "30ml", "50g")
  *         ageGroup:
  *           type: string
  *         genderTarget:
  *           type: string
- *           enum: [male, female, unisex]
- *         brandId:
+ *           enum: [male, female, all]
+ *         category:
  *           type: string
- *         categoryId:
+ *           enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
+ *         brand:
  *           type: string
+ *           enum: [The Ordinary, CeraVe, Advil, La Roche-Posay, Head & Shoulders, TRESemmé, MAC, Maybelline, Jo Malone, Colgate]
+ *         features:
+ *           type: array
+ *           items:
+ *             type: string
+ *             enum: [antioxidant, brightening, moisturizing, dry skin, pain relief, headache, sun protection, sensitive skin, dandruff, scalp care, styling, volume, foundation, full coverage, eyes, volumizing, citrus, fresh, dental, whitening]
  *         imageUrl:
  *           type: string
  *         price:
@@ -56,13 +76,17 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *     tags: [Products]
  *     parameters:
  *       - in: query
- *         name: skinGroup
+ *         name: skinType
  *         schema:
- *           type: string
+ *           type: array
+ *           items:
+ *             type: string
  *       - in: query
- *         name: function
+ *         name: benefits
  *         schema:
- *           type: string
+ *           type: array
+ *           items:
+ *             type: string
  *       - in: query
  *         name: ageGroup
  *         schema:
@@ -72,13 +96,19 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *         schema:
  *           type: string
  *       - in: query
- *         name: brandId
+ *         name: category
  *         schema:
  *           type: string
  *       - in: query
- *         name: categoryId
+ *         name: brand
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: features
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
  *       - in: query
  *         name: minPrice
  *         schema:
@@ -119,12 +149,13 @@ const { authorize, authenticateToken } = require("../middleware/auth");
 router.get("/", async (req, res) => {
   try {
     const {
-      skinGroup,
-      function: productFunction,
+      skinType,
+      benefits,
       ageGroup,
       genderTarget,
-      brandId,
-      categoryId,
+      brand,
+      category,
+      features,
       minPrice,
       maxPrice,
       sortBy,
@@ -133,12 +164,22 @@ router.get("/", async (req, res) => {
     } = req.query;
 
     const filter = {};
-    if (skinGroup) filter.skinGroup = skinGroup;
-    if (productFunction) filter.function = productFunction;
+    if (skinType) {
+      const skinTypeArray = skinType.split(",");
+      filter.skinType = { $in: skinTypeArray };
+    }
+    if (benefits) {
+      const benefitArray = benefits.split(",");
+      filter.benefits = { $in: benefitArray };
+    }
     if (ageGroup) filter.ageGroup = ageGroup;
     if (genderTarget) filter.genderTarget = genderTarget;
-    if (brandId) filter.brandId = brandId;
-    if (categoryId) filter.categoryId = categoryId;
+    if (brand) filter.brand = brand;
+    if (category) filter.category = category;
+    if (features) {
+      const featureArray = features.split(",");
+      filter.features = { $in: featureArray };
+    }
 
     if (minPrice || maxPrice) {
       filter.price = {};
@@ -155,9 +196,7 @@ router.get("/", async (req, res) => {
     const products = await Product.find(filter)
       .sort(sort)
       .skip((page - 1) * limit)
-      .limit(limit)
-      .populate("brandId", "name")
-      .populate("categoryId", "name");
+      .limit(limit);
 
     const total = await Product.countDocuments(filter);
 
@@ -208,9 +247,7 @@ router.get("/", async (req, res) => {
  */
 router.get("/:id", async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
-      .populate("brandId", "name")
-      .populate("categoryId", "name");
+    const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
@@ -250,13 +287,21 @@ router.get("/:id", async (req, res) => {
  *           schema:
  *             $ref: '#/components/schemas/Product'
  *           example:
- *             name: "Gentle Skin Lotion"
- *             function: "lotion"
- *             skinGroup: "oily"
+ *             name: "Vitamin C Brightening Serum"
+ *             description: "A powerful antioxidant serum formulated with 20% Vitamin C to brighten skin and fight signs of aging. This lightweight formula helps protect against environmental damage while improving overall skin texture and radiance."
+ *             benefits: [
+ *               "Brightens skin tone and reduces hyperpigmentation",
+ *               "Fights free radical damage from UV rays and pollution",
+ *               "Stimulates collagen production for firmer skin",
+ *               "Improves skin texture and reduces fine lines"
+ *             ]
+ *             skinType: ["oily", "dry", "combination", "sensitive", "normal", "all"]
+ *             size: "30ml"
  *             ageGroup: "18-25"
- *             genderTarget: "female"
- *             brandId: "683a0133c42af87de6a4f8ee"
- *             categoryId: "683a01fcc42af87de6a4f8f2"
+ *             genderTarget: "all"
+ *             category: "Skincare"
+ *             brand: "CeraVe"
+ *             features: ["moisturizing", "sensitive skin"]
  *             imageUrl: "https://example.com/image.jpg"
  *             price: 299
  *             stockQuantity: 150
@@ -342,10 +387,7 @@ router.post("/search/image", async (req, res) => {
     });
     await imageSearch.save();
 
-    const similarProducts = await Product.find()
-      .limit(5)
-      .populate("brandId", "name")
-      .populate("categoryId", "name");
+    const similarProducts = await Product.find().limit(5);
 
     res.json({
       searchId: imageSearch._id,
@@ -359,8 +401,9 @@ router.post("/search/image", async (req, res) => {
 /**
  * @swagger
  * /api/products/{id}:
- *   put:
- *     summary: Update product (staff only)
+ *   patch:
+ *     summary: Update product fields (staff only)
+ *     description: Partially update a product. Only the fields provided in the request body will be updated.
  *     tags: [Products]
  *     security:
  *       - bearerAuth: []
@@ -371,11 +414,54 @@ router.post("/search/image", async (req, res) => {
  *         schema:
  *           type: string
  *     requestBody:
- *       required: true
+ *       required: false
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/Product'
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               benefits:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               skinType:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum: [oily, dry, combination, sensitive, normal, all]
+ *               size:
+ *                 type: string
+ *               ageGroup:
+ *                 type: string
+ *               genderTarget:
+ *                 type: string
+ *                 enum: [male, female, all]
+ *               category:
+ *                 type: string
+ *                 enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
+ *               brand:
+ *                 type: string
+ *                 enum: [The Ordinary, CeraVe, Advil, La Roche-Posay, Head & Shoulders, TRESemmé, MAC, Maybelline, Jo Malone, Colgate]
+ *               features:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               imageUrl:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *               stockQuantity:
+ *                 type: number
+ *               aiFeatures:
+ *                 type: object
+ *           example:
+ *             name: "Updated Product Name"
+ *             price: 399
+ *             stockQuantity: 200
  *     responses:
  *       200:
  *         description: Product updated successfully
@@ -388,14 +474,45 @@ router.post("/search/image", async (req, res) => {
  *       404:
  *         description: Product not found
  */
-router.put(
+router.patch(
   "/:id",
   [authenticateToken, authorize(["staff"])],
   async (req, res) => {
     try {
-      const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
-        new: true,
+      const updateFields = {};
+      const allowedFields = [
+        "name",
+        "description",
+        "benefits",
+        "skinType",
+        "size",
+        "ageGroup",
+        "genderTarget",
+        "category",
+        "brand",
+        "features",
+        "imageUrl",
+        "price",
+        "stockQuantity",
+      ];
+
+      // Only include fields that are present in the request body
+      allowedFields.forEach((field) => {
+        if (req.body[field] !== undefined) {
+          updateFields[field] = req.body[field];
+        }
       });
+
+      // Handle aiFeatures separately since it's a Map
+      if (req.body.aiFeatures) {
+        updateFields.aiFeatures = new Map(Object.entries(req.body.aiFeatures));
+      }
+
+      const product = await Product.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateFields },
+        { new: true }
+      );
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
