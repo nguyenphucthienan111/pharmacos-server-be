@@ -14,17 +14,12 @@ const { authorize } = require("../middleware/auth");
  *       properties:
  *         name:
  *           type: string
- *         email:
- *           type: string
- *           format: email
  *         gender:
  *           type: string
  *           enum: [male, female, other]
  *         dateOfBirth:
  *           type: string
  *           format: date
- *         loyaltyPoints:
- *           type: number
  *     ProductRecommendation:
  *       type: object
  *       properties:
@@ -106,17 +101,7 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
  */
 router.put("/profile", authorize(["customer"]), async (req, res) => {
   try {
-    const { name, gender, dateOfBirth, email } = req.body;
-
-    if (email) {
-      const existingCustomer = await Customer.findOne({
-        email,
-        _id: { $ne: req.user.profileId },
-      });
-      if (existingCustomer) {
-        return res.status(400).json({ message: "Email already in use" });
-      }
-    }
+    const { name, gender, dateOfBirth } = req.body;
 
     const customer = await Customer.findByIdAndUpdate(
       req.user.profileId,
@@ -124,7 +109,6 @@ router.put("/profile", authorize(["customer"]), async (req, res) => {
         name,
         gender,
         dateOfBirth,
-        email,
       },
       { new: true }
     ).select("-accountId");
@@ -138,45 +122,6 @@ router.put("/profile", authorize(["customer"]), async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 });
-
-// /**
-//  * @swagger
-//  * /api/customers/loyalty-points:
-//  *   get:
-//  *     summary: Get customer loyalty points
-//  *     tags: [Customers]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     responses:
-//  *       200:
-//  *         description: Loyalty points retrieved successfully
-//  *         content:
-//  *           application/json:
-//  *             schema:
-//  *               type: object
-//  *               properties:
-//  *                 points:
-//  *                   type: number
-//  *       401:
-//  *         description: Not authenticated
-//  *       404:
-//  *         description: Customer not found
-//  */
-// router.get("/loyalty-points", authorize(["customer"]), async (req, res) => {
-//   try {
-//     const customer = await Customer.findById(req.user.profileId).select(
-//       "loyaltyPoints"
-//     );
-
-//     if (!customer) {
-//       return res.status(404).json({ message: "Customer not found" });
-//     }
-
-//     res.json({ points: customer.loyaltyPoints });
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// });
 
 /**
  * @swagger
