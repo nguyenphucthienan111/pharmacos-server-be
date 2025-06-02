@@ -462,9 +462,8 @@ router.put("/change-password", async (req, res) => {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
 
-    // Update password
-    const salt = await bcrypt.genSalt(10);
-    account.password = await bcrypt.hash(newPassword, salt);
+    // Update password - let the pre-save hook handle hashing
+    account.password = newPassword;
     await account.save();
 
     res.json({ message: "Password changed successfully" });
