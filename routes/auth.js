@@ -41,9 +41,6 @@ const {
  *         dateOfBirth:
  *           type: string
  *           format: date
- *         skinType:
- *           type: string
- *           enum: [oily, dry, combination, sensitive, normal]
  */
 
 /**
@@ -114,7 +111,6 @@ router.post("/register", async (req, res) => {
       email,
       gender,
       dateOfBirth,
-      skinType,
       accountId: account._id,
     });
     await customer.save();

@@ -23,9 +23,6 @@ const { authorize } = require("../middleware/auth");
  *         dateOfBirth:
  *           type: string
  *           format: date
- *         skinType:
- *           type: string
- *           enum: [oily, dry, combination, sensitive, normal]
  *         loyaltyPoints:
  *           type: number
  *     ProductRecommendation:
@@ -109,7 +106,7 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
  */
 router.put("/profile", authorize(["customer"]), async (req, res) => {
   try {
-    const { name, gender, dateOfBirth, email, skinType } = req.body;
+    const { name, gender, dateOfBirth, email } = req.body;
 
     if (email) {
       const existingCustomer = await Customer.findOne({
@@ -128,7 +125,6 @@ router.put("/profile", authorize(["customer"]), async (req, res) => {
         gender,
         dateOfBirth,
         email,
-        skinType,
       },
       { new: true }
     ).select("-accountId");
@@ -181,50 +177,6 @@ router.put("/profile", authorize(["customer"]), async (req, res) => {
 //     res.status(500).json({ message: error.message });
 //   }
 // });
-
-/**
- * @swagger
- * /api/customers/recommendations:
- *   get:
- *     summary: Get personalized product recommendations
- *     tags: [Customers]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Product recommendations retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/ProductRecommendation'
- *       401:
- *         description: Not authenticated
- *       404:
- *         description: Customer not found
- */
-router.get("/recommendations", authorize(["customer"]), async (req, res) => {
-  try {
-    const customer = await Customer.findById(req.user.profileId);
-    if (!customer) {
-      return res.status(404).json({ message: "Customer not found" });
-    }
-
-    const Product = require("../models/Product");
-    const recommendations = await Product.find({
-      skinGroup: customer.skinType,
-      stockQuantity: { $gt: 0 },
-    })
-      .populate("brandId", "name")
-      .populate("categoryId", "name")
-      .limit(10);
-
-    res.json(recommendations);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
 
 /**
  * @swagger
