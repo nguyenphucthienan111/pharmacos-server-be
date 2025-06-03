@@ -13,6 +13,14 @@ const customerSchema = new mongoose.Schema(
       unique: true,
       required: true,
     },
+    phone: {
+      type: String,
+      trim: true,
+    },
+    address: {
+      type: String,
+      trim: true,
+    },
     accountId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Account",

@@ -102,11 +102,13 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
 router.patch("/profile", authorize(["customer"]), async (req, res) => {
   try {
     const updateFields = {};
-    const { name, gender, dateOfBirth } = req.body;
+    const { name, gender, dateOfBirth, phone, address } = req.body;
 
     if (name !== undefined) updateFields.name = name;
     if (gender !== undefined) updateFields.gender = gender;
     if (dateOfBirth !== undefined) updateFields.dateOfBirth = dateOfBirth;
+    if (phone !== undefined) updateFields.phone = phone;
+    if (address !== undefined) updateFields.address = address;
 
     const customer = await Customer.findByIdAndUpdate(
       req.user.profileId,
