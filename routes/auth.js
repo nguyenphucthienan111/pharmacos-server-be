@@ -8,6 +8,7 @@ const Admin = require("../models/Admin");
 const {
   generateVerificationToken,
   sendVerificationEmail,
+  sendResetPasswordEmail,
 } = require("../utils/emailService");
 
 /**
@@ -237,6 +238,15 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    // Check if account is locked
+    if (account.status === "locked") {
+      return res
+        .status(401)
+        .json({
+          message: "Your account has been locked. Please contact support.",
+        });
+    }
+
     // Check if email is verified for customer accounts
     if (account.role === "customer" && !account.isVerified) {
       return res.status(401).json({
@@ -414,6 +424,121 @@ router.post("/create-admin", async (req, res) => {
         role: "admin",
       },
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/forgot-password:
+ *   post:
+ *     summary: Request password reset email
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Reset password email sent
+ *       404:
+ *         description: Account not found
+ *       500:
+ *         description: Server error
+ */
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Find account by email
+    const account = await Account.findOne({ email });
+    if (!account) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    // Generate reset token
+    const resetToken = generateVerificationToken();
+    const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Save reset token and expiry
+    account.resetPasswordToken = resetToken;
+    account.resetPasswordExpires = resetExpires;
+    await account.save();
+
+    // Send reset email
+    const emailSent = await sendResetPasswordEmail(email, resetToken);
+
+    if (!emailSent) {
+      return res.status(500).json({ message: "Failed to send reset email" });
+    }
+
+    res.json({ message: "Password reset email sent successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/reset-password:
+ *   post:
+ *     summary: Reset password using token
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - newPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Password reset successful
+ *       400:
+ *         description: Invalid or expired token
+ *       500:
+ *         description: Server error
+ */
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    // Find account with valid reset token
+    const account = await Account.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!account) {
+      return res.status(400).json({
+        message: "Password reset token is invalid or has expired",
+      });
+    }
+
+    // Update password and clear reset token
+    account.password = newPassword;
+    account.resetPasswordToken = undefined;
+    account.resetPasswordExpires = undefined;
+    await account.save();
+
+    res.json({ message: "Password has been reset successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

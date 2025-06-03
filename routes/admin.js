@@ -191,9 +191,9 @@ router.get("/customers/:id", async (req, res) => {
 
 /**
  * @swagger
- * /api/admin/customers/{id}/status:
+ * /api/admin/users/{id}/status:
  *   patch:
- *     summary: Update customer status
+ *     summary: Update user account status (active/locked)
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
@@ -203,6 +203,7 @@ router.get("/customers/:id", async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
+ *         description: User's account ID
  *     requestBody:
  *       required: true
  *       content:
@@ -214,27 +215,37 @@ router.get("/customers/:id", async (req, res) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [active, blocked]
+ *                 enum: [active, locked]
  *     responses:
  *       200:
- *         description: Customer status updated successfully
+ *         description: Account status updated successfully
+ *       403:
+ *         description: Cannot modify admin accounts
  *       404:
- *         description: Customer not found
+ *         description: Account not found
  */
-router.patch("/customers/:id/status", async (req, res) => {
+router.patch("/users/:id/status", async (req, res) => {
   try {
     const { status } = req.body;
-    const customer = await Customer.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
+    const account = await Account.findById(req.params.id);
 
-    if (!customer) {
-      return res.status(404).json({ message: "Customer not found" });
+    if (!account) {
+      return res.status(404).json({ message: "Account not found" });
     }
 
-    res.json(customer);
+    // Prevent modifying admin accounts
+    if (account.role === "admin") {
+      return res.status(403).json({ message: "Cannot modify admin accounts" });
+    }
+
+    // Update account status
+    account.status = status;
+    await account.save();
+
+    res.json({
+      message: "Account status updated successfully",
+      account,
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -258,52 +269,6 @@ router.get("/accounts", async (req, res) => {
     res.json(accounts);
   } catch (error) {
     res.status(500).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
- * /api/admin/accounts/{id}/status:
- *   patch:
- *     summary: Lock or unlock user account
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - status
- *             properties:
- *               status:
- *                 type: string
- *                 enum: [active, locked]
- */
-router.patch("/accounts/:id/status", async (req, res) => {
-  try {
-    const { status } = req.body;
-    const account = await Account.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
-
-    if (!account) {
-      return res.status(404).json({ message: "Account not found" });
-    }
-
-    res.json(account);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
   }
 });
 
