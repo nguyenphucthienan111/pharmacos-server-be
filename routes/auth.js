@@ -240,11 +240,9 @@ router.post("/login", async (req, res) => {
 
     // Check if account is locked
     if (account.status === "locked") {
-      return res
-        .status(401)
-        .json({
-          message: "Your account has been locked. Please contact support.",
-        });
+      return res.status(401).json({
+        message: "Your account has been locked. Please contact support.",
+      });
     }
 
     // Check if email is verified for customer accounts
@@ -269,7 +267,8 @@ router.post("/login", async (req, res) => {
 
     const token = jwt.sign(
       {
-        id: account._id,
+        _id: account._id, // Include as _id to match mongoose convention
+        id: account._id, // Keep id for backward compatibility
         role: account.role,
         profileId: userProfile._id,
       },

@@ -146,7 +146,7 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *                 total:
  *                   type: integer
  */
-router.get("/", async (req, res) => {
+router.get("/", authenticateToken, async (req, res) => {
   try {
     const {
       skinType,
@@ -163,7 +163,9 @@ router.get("/", async (req, res) => {
       limit = 10,
     } = req.query;
 
-    const filter = {};
+    const filter = {
+      ...(req.user.role === "staff" ? { createdBy: req.user.id } : {}),
+    };
     if (skinType) {
       const skinTypeArray = skinType.split(",");
       filter.skinType = { $in: skinTypeArray };
@@ -327,14 +329,27 @@ router.post(
   [authenticateToken, authorize(["staff"])],
   async (req, res) => {
     try {
-      // Convert aiFeatures to Map format
+      // Log the user object to debug
+      console.log("Authenticated user:", req.user);
+
+      if (!req.user || !req.user._id) {
+        return res
+          .status(401)
+          .json({ message: "User authentication required" });
+      }
+
+      // Add createdBy field and convert aiFeatures to Map format
       const productData = {
         ...req.body,
+        createdBy: req.user.id, // Using id from JWT token
         aiFeatures: new Map(Object.entries(req.body.aiFeatures || {})),
       };
 
       const product = new Product(productData);
       await product.save();
+
+      // Populate the createdBy field in the response
+      await product.populate("createdBy", "username email");
       res.status(201).json(product);
     } catch (error) {
       res.status(400).json({ message: error.message });
@@ -508,11 +523,21 @@ router.patch(
         updateFields.aiFeatures = new Map(Object.entries(req.body.aiFeatures));
       }
 
-      const product = await Product.findByIdAndUpdate(
-        req.params.id,
-        { $set: updateFields },
-        { new: true }
-      );
+      // Ensure staff can only update their own products
+      const product = await Product.findOne({
+        _id: req.params.id,
+        ...(req.user.role === "staff" ? { createdBy: req.user.id } : {}),
+      });
+
+      if (!product) {
+        return res.status(404).json({
+          message:
+            "Product not found or you don't have permission to update it",
+        });
+      }
+
+      Object.assign(product, updateFields);
+      await product.save();
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
@@ -552,7 +577,11 @@ router.delete(
   [authenticateToken, authorize(["staff"])],
   async (req, res) => {
     try {
-      const product = await Product.findByIdAndDelete(req.params.id);
+      // Ensure staff can only delete their own products
+      const product = await Product.findOne({
+        _id: req.params.id,
+        ...(req.user.role === "staff" ? { createdBy: req.user.id } : {}),
+      });
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
