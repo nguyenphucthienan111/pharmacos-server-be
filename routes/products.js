@@ -588,6 +588,7 @@ router.delete(
       await ProductSimilarity.deleteMany({
         $or: [{ productId: product._id }, { similarProductId: product._id }],
       });
+      await product.deleteOne(); // Actually delete the product document
       res.json({ message: "Product deleted successfully" });
     } catch (error) {
       res.status(500).json({ message: error.message });
