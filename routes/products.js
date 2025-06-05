@@ -72,61 +72,8 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  * @swagger
  * /api/products:
  *   get:
- *     summary: Get all products with filtering
+ *     summary: Get all products
  *     tags: [Products]
- *     parameters:
- *       - in: query
- *         name: skinType
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *       - in: query
- *         name: benefits
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *       - in: query
- *         name: ageGroup
- *         schema:
- *           type: string
- *       - in: query
- *         name: genderTarget
- *         schema:
- *           type: string
- *       - in: query
- *         name: category
- *         schema:
- *           type: string
- *       - in: query
- *         name: brand
- *         schema:
- *           type: string
- *       - in: query
- *         name: features
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *       - in: query
- *         name: minPrice
- *         schema:
- *           type: number
- *       - in: query
- *         name: maxPrice
- *         schema:
- *           type: number
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
  *     responses:
  *       200:
  *         description: Products retrieved successfully
@@ -148,59 +95,14 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  */
 router.get("/", authenticateToken, async (req, res) => {
   try {
-    const {
-      skinType,
-      benefits,
-      ageGroup,
-      genderTarget,
-      brand,
-      category,
-      features,
-      minPrice,
-      maxPrice,
-      sortBy,
-      page = 1,
-      limit = 10,
-    } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
 
-    const filter = {
-      ...(req.user.role === "staff" ? { createdBy: req.user.id } : {}),
-    };
-    if (skinType) {
-      const skinTypeArray = skinType.split(",");
-      filter.skinType = { $in: skinTypeArray };
-    }
-    if (benefits) {
-      const benefitArray = benefits.split(",");
-      filter.benefits = { $in: benefitArray };
-    }
-    if (ageGroup) filter.ageGroup = ageGroup;
-    if (genderTarget) filter.genderTarget = genderTarget;
-    if (brand) filter.brand = brand;
-    if (category) filter.category = category;
-    if (features) {
-      const featureArray = features.split(",");
-      filter.features = { $in: featureArray };
-    }
-
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = Number(minPrice);
-      if (maxPrice) filter.price.$lte = Number(maxPrice);
-    }
-
-    let sort = {};
-    if (sortBy) {
-      const [field, order] = sortBy.split(":");
-      sort[field] = order === "desc" ? -1 : 1;
-    }
-
-    const products = await Product.find(filter)
-      .sort(sort)
+    const products = await Product.find()
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const total = await Product.countDocuments(filter);
+    const total = await Product.countDocuments();
 
     res.json({
       products,
@@ -312,7 +214,7 @@ router.get("/:id", async (req, res) => {
  *             }
  *     responses:
  *       201:
- *         description: Product created successfully
+ *         description: Product   d successfully
  *         content:
  *           application/json:
  *             schema:

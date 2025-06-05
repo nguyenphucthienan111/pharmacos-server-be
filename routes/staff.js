@@ -14,15 +14,144 @@ router.use(authorize(["staff"]));
  * @swagger
  * /api/staff/products:
  *   get:
- *     summary: Get all products with inventory information
+ *     summary: Get all products with filtering
  *     tags: [Staff]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: skinType
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *       - in: query
+ *         name: benefits
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *       - in: query
+ *         name: ageGroup
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: genderTarget
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: brand
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: features
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *       - in: query
+ *         name: minPrice
+ *         schema:
+ *           type: number
+ *       - in: query
+ *         name: maxPrice
+ *         schema:
+ *           type: number
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Products retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 products:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Product'
+ *                 totalPages:
+ *                   type: integer
+ *                 currentPage:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
  */
 router.get("/products", async (req, res) => {
   try {
-    const products = await Product.find();
-    res.json(products);
+    const {
+      skinType,
+      benefits,
+      ageGroup,
+      genderTarget,
+      brand,
+      category,
+      features,
+      minPrice,
+      maxPrice,
+      sortBy,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const filter = {
+      createdBy: req.user.id, // Only show products created by the current staff member
+    };
+    if (skinType) {
+      const skinTypeArray = skinType.split(",");
+      filter.skinType = { $in: skinTypeArray };
+    }
+    if (benefits) {
+      const benefitArray = benefits.split(",");
+      filter.benefits = { $in: benefitArray };
+    }
+    if (ageGroup) filter.ageGroup = ageGroup;
+    if (genderTarget) filter.genderTarget = genderTarget;
+    if (brand) filter.brand = brand;
+    if (category) filter.category = category;
+    if (features) {
+      const featureArray = features.split(",");
+      filter.features = { $in: featureArray };
+    }
+
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = Number(minPrice);
+      if (maxPrice) filter.price.$lte = Number(maxPrice);
+    }
+
+    let sort = {};
+    if (sortBy) {
+      const [field, order] = sortBy.split(":");
+      sort[field] = order === "desc" ? -1 : 1;
+    }
+
+    const products = await Product.find(filter)
+      .sort(sort)
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      products,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      total,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
