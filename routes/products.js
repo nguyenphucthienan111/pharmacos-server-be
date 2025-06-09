@@ -19,9 +19,11 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *         - category
  *         - brand
  *         - price
+ *         - instructions
  *       properties:
  *         name:
  *           type: string
+ *           description: Product name
  *         description:
  *           type: string
  *           description: Detailed product description
@@ -29,43 +31,84 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *           type: array
  *           items:
  *             type: string
- *           description: List of product benefits and effects
+ *           description: List of product benefits
  *         skinType:
  *           type: array
  *           items:
  *             type: string
  *             enum: [oily, dry, combination, sensitive, normal, all]
- *           description: List of suitable skin types
+ *           description: Suitable skin types
  *         size:
  *           type: string
- *           description: Product size/volume (e.g., "30ml", "50g")
- *         ageGroup:
- *           type: string
- *         genderTarget:
- *           type: string
- *           enum: [male, female, all]
+ *           description: Product size/volume
  *         category:
  *           type: string
  *           enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
  *         brand:
  *           type: string
  *           enum: [The Ordinary, CeraVe, Advil, La Roche-Posay, Head & Shoulders, TRESemmé, MAC, Maybelline, Jo Malone, Colgate]
+ *         price:
+ *           type: number
+ *           minimum: 0
+ *         stockQuantity:
+ *           type: number
+ *           minimum: 0
+ *         ingredients:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               percentage:
+ *                 type: number
+ *               purpose:
+ *                 type: string
+ *         instructions:
+ *           type: string
+ *           description: How to use the product
+ *         warnings:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Side effects and warnings
  *         features:
  *           type: array
  *           items:
  *             type: string
- *             enum: [antioxidant, brightening, moisturizing, dry skin, pain relief, headache, sun protection, sensitive skin, dandruff, scalp care, styling, volume, foundation, full coverage, eyes, volumizing, citrus, fresh, dental, whitening]
- *         imageUrl:
- *           type: string
- *         price:
- *           type: number
- *           minimum: 0
- *           required: true
- *         stockQuantity:
- *           type: number
- *           minimum: 0
- *         aiFeatures:
- *           type: object
+ *           enum: [antioxidant, brightening, moisturizing, dry skin, pain relief, headache, sun protection, sensitive skin, dandruff, scalp care, styling, volume, foundation, full coverage, eyes, volumizing, citrus, fresh, dental, whitening]
+ *         images:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               url:
+ *                 type: string
+ *                 required: true
+ *                 description: URL of the image
+ *               alt:
+ *                 type: string
+ *                 description: Alternative text for the image
+ *               isPrimary:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Whether this is the primary product image
+ *         reviews:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               rating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *               comment:
+ *                 type: string
+ *               createdAt:
+ *                 type: string
+ *                 format: date-time
  */
 
 /**
@@ -180,6 +223,60 @@ router.get("/featured", async (req, res) => {
   }
 });
 
+// Route for searching products
+router.get("/search", async (req, res) => {
+  try {
+    const { query, page = 1, limit = 10 } = req.query;
+
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query is required",
+      });
+    }
+
+    const searchRegex = new RegExp(query, "i");
+    const filter = {
+      $or: [
+        { name: searchRegex },
+        { description: searchRegex },
+        { brand: searchRegex },
+        { category: searchRegex },
+        { benefits: searchRegex },
+      ],
+    };
+
+    const products = await Product.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select("-__v");
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        products,
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / limit),
+          currentPage: parseInt(page),
+          limit: parseInt(limit),
+        },
+        searchQuery: query,
+      },
+    });
+  } catch (error) {
+    console.error("Error searching products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error searching products",
+      error: error.message,
+    });
+  }
+});
+
 // Route for products by category
 router.get("/category/:categoryName", async (req, res) => {
   try {
@@ -261,7 +358,9 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    const product = await Product.findById(req.params.id).select("-__v"); // Exclude version field
+    const product = await Product.findById(req.params.id)
+      .populate("reviews.userId", "username email") // Populate review user details
+      .select("-__v"); // Exclude version field
 
     if (!product) {
       return res.status(404).json({
@@ -312,27 +411,41 @@ router.get("/:id", async (req, res) => {
  *           schema:
  *             $ref: '#/components/schemas/Product'
  *           example:
- *             name: "Vitamin C Brightening Serum"
- *             description: "A powerful antioxidant serum formulated with 20% Vitamin C to brighten skin and fight signs of aging. This lightweight formula helps protect against environmental damage while improving overall skin texture and radiance."
- *             benefits: [
- *               "Brightens skin tone and reduces hyperpigmentation",
- *               "Fights free radical damage from UV rays and pollution",
- *               "Stimulates collagen production for firmer skin",
- *               "Improves skin texture and reduces fine lines"
- *             ]
- *             skinType: ["oily", "dry", "combination", "sensitive", "normal", "all"]
+ *             name: "Vitamin C Serum"
+ *             description: "Powerful antioxidant serum"
+ *             benefits: ["Brightening", "Anti-aging"]
+ *             skinType: ["all"]
  *             size: "30ml"
- *             ageGroup: "18-25"
- *             genderTarget: "all"
  *             category: "Skincare"
- *             brand: "CeraVe"
- *             features: ["moisturizing", "sensitive skin"]
- *             imageUrl: "https://example.com/image.jpg"
+ *             brand: "The Ordinary"
  *             price: 299
- *             stockQuantity: 150
- *             aiFeatures: {
- *               "recommendationScore": "8.5"
- *             }
+ *             stockQuantity: 100
+ *             ingredients: [
+ *               {
+ *                 "name": "Vitamin C",
+ *                 "percentage": 20,
+ *                 "purpose": "Antioxidant, brightening"
+ *               }
+ *             ]
+ *             instructions: "Apply morning and night"
+ *             warnings: ["May increase sun sensitivity"]
+ *             features: [
+ *               "antioxidant",
+ *               "brightening",
+ *               "moisturizing",
+ *               "sensitive skin"
+ *             ]
+ *             images: [
+ *               {
+ *                 "url": "https://example.com/vitamin-c-main.jpg",
+ *                 "alt": "Product front view",
+ *                 "isPrimary": true
+ *               },
+ *               {
+ *                 "url": "https://example.com/vitamin-c-side.jpg",
+ *                 "alt": "Product side view"
+ *               }
+ *             ]
  *     responses:
  *       201:
  *         description: Product   d successfully
@@ -414,6 +527,207 @@ router.post(
  *                   items:
  *                     $ref: '#/components/schemas/Product'
  */
+
+/**
+ * @swagger
+ * /api/products/{id}/reviews:
+ *   post:
+ *     summary: Add a review to a product
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rating
+ *             properties:
+ *               rating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: Rating from 1 to 5
+ *               comment:
+ *                 type: string
+ *                 description: Review comment
+ *     responses:
+ *       200:
+ *         description: Review added successfully
+ *       400:
+ *         description: Invalid rating or user already reviewed
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Product not found
+ */
+router.post("/:id/reviews", authenticateToken, async (req, res) => {
+  try {
+    const { rating, comment } = req.body;
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating must be between 1 and 5",
+      });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // Check if user has already reviewed
+    const existingReview = product.reviews.find(
+      (review) => review.userId.toString() === req.user.id
+    );
+    if (existingReview) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already reviewed this product",
+      });
+    }
+
+    product.reviews.push({
+      userId: req.user.id,
+      rating,
+      comment,
+    });
+
+    await product.save();
+    await product.populate("reviews.userId", "username email");
+
+    res.json({
+      success: true,
+      data: product.reviews[product.reviews.length - 1],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error adding review",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/products/{id}/reviews:
+ *   get:
+ *     summary: Get product reviews
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Reviews retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 reviews:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       userId:
+ *                         type: object
+ *                         properties:
+ *                           username:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                       rating:
+ *                         type: number
+ *                       comment:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     currentPage:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *       404:
+ *         description: Product not found
+ */
+router.get("/:id/reviews", async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const product = await Product.findById(req.params.id)
+      .populate("reviews.userId", "username email")
+      .select("reviews");
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // Calculate pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    const total = product.reviews.length;
+
+    // Sort reviews by date (newest first) and paginate
+    const paginatedReviews = product.reviews
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(startIndex, endIndex);
+
+    res.json({
+      success: true,
+      data: {
+        reviews: paginatedReviews,
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / limit),
+          currentPage: parseInt(page),
+          limit: parseInt(limit),
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching reviews",
+      error: error.message,
+    });
+  }
+});
+
 router.post("/search/image", async (req, res) => {
   try {
     const { imageUrl, customerId } = req.body;
@@ -473,11 +787,6 @@ router.post("/search/image", async (req, res) => {
  *                   enum: [oily, dry, combination, sensitive, normal, all]
  *               size:
  *                 type: string
- *               ageGroup:
- *                 type: string
- *               genderTarget:
- *                 type: string
- *                 enum: [male, female, all]
  *               category:
  *                 type: string
  *                 enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
@@ -524,8 +833,6 @@ router.patch(
         "benefits",
         "skinType",
         "size",
-        "ageGroup",
-        "genderTarget",
         "category",
         "brand",
         "features",

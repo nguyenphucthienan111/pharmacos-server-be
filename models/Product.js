@@ -7,6 +7,48 @@ const productSchema = new mongoose.Schema(
       ref: "Account",
       required: true,
     },
+    ingredients: [
+      {
+        name: {
+          type: String,
+          required: true,
+        },
+        percentage: {
+          type: Number,
+          min: 0,
+          max: 100,
+        },
+        purpose: String,
+      },
+    ],
+    instructions: {
+      type: String,
+      required: true,
+    },
+    warnings: {
+      type: [String],
+      default: [],
+    },
+    reviews: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Customer",
+          required: true,
+        },
+        rating: {
+          type: Number,
+          required: true,
+          min: 1,
+          max: 5,
+        },
+        comment: String,
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     name: {
       type: String,
       required: true,
@@ -29,11 +71,6 @@ const productSchema = new mongoose.Schema(
     size: {
       type: String,
       required: true,
-    },
-    ageGroup: String,
-    genderTarget: {
-      type: String,
-      enum: ["male", "female", "all"],
     },
     category: {
       type: String,
@@ -89,7 +126,19 @@ const productSchema = new mongoose.Schema(
       ],
       default: [],
     },
-    imageUrl: String,
+    images: [
+      {
+        url: {
+          type: String,
+          required: true,
+        },
+        alt: String,
+        isPrimary: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
     price: {
       type: Number,
       required: true,
