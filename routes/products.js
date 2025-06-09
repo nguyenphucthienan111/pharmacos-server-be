@@ -97,21 +97,124 @@ router.get("/", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
+    const category = req.query.category;
+    const brand = req.query.brand;
+    const minPrice = parseFloat(req.query.minPrice);
+    const maxPrice = parseFloat(req.query.maxPrice);
+    const sortBy = req.query.sortBy || "createdAt"; // default sort by creation date
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    const products = await Product.find()
+    // Build filter object
+    const filter = {};
+    if (category) filter.category = category;
+    if (brand) filter.brand = brand;
+    if (!isNaN(minPrice) || !isNaN(maxPrice)) {
+      filter.price = {};
+      if (!isNaN(minPrice)) filter.price.$gte = minPrice;
+      if (!isNaN(maxPrice)) filter.price.$lte = maxPrice;
+    }
+
+    // Create sort object
+    const sort = {};
+    sort[sortBy] = sortOrder;
+
+    const products = await Product.find(filter)
+      .sort(sort)
       .skip((page - 1) * limit)
-      .limit(limit);
+      .limit(limit)
+      .select("-__v");
 
-    const total = await Product.countDocuments();
+    const total = await Product.countDocuments(filter);
 
     res.json({
-      products,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      total,
+      success: true,
+      data: {
+        products,
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / limit),
+          currentPage: page,
+          limit,
+        },
+        filters: {
+          category,
+          brand,
+          price: {
+            min: minPrice,
+            max: maxPrice,
+          },
+        },
+      },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error fetching products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching products",
+      error: error.message,
+    });
+  }
+});
+
+// Route for featured products on home page
+router.get("/featured", async (req, res) => {
+  try {
+    const products = await Product.find()
+      .sort({ createdAt: -1 }) // Get latest products
+      .limit(8) // Limit to 8 featured products
+      .select("-__v");
+
+    res.json({
+      success: true,
+      data: {
+        products,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching featured products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching featured products",
+      error: error.message,
+    });
+  }
+});
+
+// Route for products by category
+router.get("/category/:categoryName", async (req, res) => {
+  try {
+    const { categoryName } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const products = await Product.find({ category: categoryName })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select("-__v");
+
+    const total = await Product.countDocuments({ category: categoryName });
+
+    res.json({
+      success: true,
+      data: {
+        products,
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / limit),
+          currentPage: page,
+          limit,
+        },
+        category: categoryName,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching products by category:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching products by category",
+      error: error.message,
+    });
   }
 });
 
@@ -151,10 +254,20 @@ router.get("/", async (req, res) => {
  */
 router.get("/:id", async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID format",
+      });
+    }
+
+    const product = await Product.findById(req.params.id).select("-__v"); // Exclude version field
 
     if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
     }
 
     const similarities = await ProductSimilarity.find({
@@ -162,17 +275,25 @@ router.get("/:id", async (req, res) => {
     })
       .sort({ similarityScore: -1 })
       .limit(5)
-      .populate("similarProductId");
+      .populate("similarProductId", "-__v"); // Populate and exclude version field
 
     res.json({
-      product,
-      similarProducts: similarities.map((s) => ({
-        product: s.similarProductId,
-        similarityScore: s.similarityScore,
-      })),
+      success: true,
+      data: {
+        product,
+        similarProducts: similarities.map((s) => ({
+          product: s.similarProductId,
+          similarityScore: s.similarityScore,
+        })),
+      },
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error fetching product:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching product details",
+      error: error.message,
+    });
   }
 });
 
