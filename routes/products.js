@@ -44,9 +44,11 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *         category:
  *           type: string
  *           enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
- *         brand:
- *           type: string
- *           enum: [The Ordinary, CeraVe, Advil, La Roche-Posay, Head & Shoulders, TRESemmé, MAC, Maybelline, Jo Malone, Colgate]
+ *           brand:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Array of brand names
  *         price:
  *           type: number
  *           minimum: 0
@@ -76,7 +78,7 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *           type: array
  *           items:
  *             type: string
- *           enum: [antioxidant, brightening, moisturizing, dry skin, pain relief, headache, sun protection, sensitive skin, dandruff, scalp care, styling, volume, foundation, full coverage, eyes, volumizing, citrus, fresh, dental, whitening]
+ *           description: Array of product features
  *         images:
  *           type: array
  *           items:
@@ -150,7 +152,7 @@ router.get("/", async (req, res) => {
     // Build filter object
     const filter = {};
     if (category) filter.category = category;
-    if (brand) filter.brand = brand;
+    if (brand) filter.brand = { $in: [brand] }; // Search for brand in the array
     if (!isNaN(minPrice) || !isNaN(maxPrice)) {
       filter.price = {};
       if (!isNaN(minPrice)) filter.price.$gte = minPrice;
@@ -240,7 +242,7 @@ router.get("/search", async (req, res) => {
       $or: [
         { name: searchRegex },
         { description: searchRegex },
-        { brand: searchRegex },
+        { brand: { $in: [searchRegex] } }, // Search for brand in the array
         { category: searchRegex },
         { benefits: searchRegex },
       ],
@@ -417,7 +419,7 @@ router.get("/:id", async (req, res) => {
  *             skinType: ["all"]
  *             size: "30ml"
  *             category: "Skincare"
- *             brand: "The Ordinary"
+ *             brand: ["The Ordinary", "CeraVe"]
  *             price: 299
  *             stockQuantity: 100
  *             ingredients: [
@@ -791,8 +793,9 @@ router.post("/search/image", async (req, res) => {
  *                 type: string
  *                 enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
  *               brand:
- *                 type: string
- *                 enum: [The Ordinary, CeraVe, Advil, La Roche-Posay, Head & Shoulders, TRESemmé, MAC, Maybelline, Jo Malone, Colgate]
+ *                 type: array
+ *                 items:
+ *                   type: string
  *               features:
  *                 type: array
  *                 items:
