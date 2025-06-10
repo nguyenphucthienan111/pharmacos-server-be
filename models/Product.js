@@ -81,8 +81,16 @@ const productSchema = new mongoose.Schema(
         "Haircare",
         "Makeup",
         "Fragrances",
-        "Personal Care",
+        "Natural Products",
       ],
+    },
+    subcategory: {
+      type: String,
+      required: true,
+    },
+    isPopular: {
+      type: Boolean,
+      default: false,
     },
     brand: {
       type: [String],

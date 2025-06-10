@@ -21,6 +21,18 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *         - price
  *         - instructions
  *       properties:
+ *         _id:
+ *           type: string
+ *           description: Auto-generated MongoDB ID
+ *         createdBy:
+ *           type: string
+ *           description: Reference to account who created the product
+ *         isPopular:
+ *           type: boolean
+ *           description: Whether this is a popular/bestseller product
+ *         subcategory:
+ *           type: string
+ *           description: Product subcategory
  *         name:
  *           type: string
  *           description: Product name
@@ -43,8 +55,9 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *           description: Product size/volume
  *         category:
  *           type: string
- *           enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
- *           brand:
+ *           enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Natural Products]
+ *           description: Product category
+ *         brand:
  *           type: array
  *           items:
  *             type: string
@@ -143,6 +156,7 @@ router.get("/", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const category = req.query.category;
+    const subcategory = req.query.subcategory;
     const brand = req.query.brand;
     const minPrice = parseFloat(req.query.minPrice);
     const maxPrice = parseFloat(req.query.maxPrice);
@@ -151,7 +165,8 @@ router.get("/", async (req, res) => {
 
     // Build filter object
     const filter = {};
-    if (category) filter.category = category;
+    if (category) filter.category = category.toLowerCase();
+    if (subcategory) filter.subcategory = subcategory;
     if (brand) filter.brand = { $in: [brand] }; // Search for brand in the array
     if (!isNaN(minPrice) || !isNaN(maxPrice)) {
       filter.price = {};
@@ -201,12 +216,19 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Route for featured products on home page
-router.get("/featured", async (req, res) => {
+// Route for popular products by category
+router.get("/popular/:category?", async (req, res) => {
   try {
-    const products = await Product.find()
-      .sort({ createdAt: -1 }) // Get latest products
-      .limit(8) // Limit to 8 featured products
+    const { category } = req.params;
+    const filter = { isPopular: true };
+
+    if (category) {
+      filter.category = category.toLowerCase();
+    }
+
+    const products = await Product.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(category ? 2 : 8) // Show 2 popular products per category, or 8 if no category specified
       .select("-__v");
 
     res.json({
@@ -286,7 +308,9 @@ router.get("/category/:categoryName", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
 
-    const products = await Product.find({ category: categoryName })
+    const products = await Product.find({
+      category: categoryName.toLowerCase(),
+    })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -411,14 +435,87 @@ router.get("/:id", async (req, res) => {
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/Product'
+ *             type: object
+ *             required:
+ *               - name
+ *               - description
+ *               - benefits
+ *               - skinType
+ *               - size
+ *               - category
+ *               - brand
+ *               - price
+ *               - instructions
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               subcategory:
+ *                 type: string
+ *               isPopular:
+ *                 type: boolean
+ *               benefits:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               skinType:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               size:
+ *                 type: string
+ *               brand:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               price:
+ *                 type: number
+ *               stockQuantity:
+ *                 type: number
+ *               ingredients:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     name:
+ *                       type: string
+ *                     percentage:
+ *                       type: number
+ *                     purpose:
+ *                       type: string
+ *               instructions:
+ *                 type: string
+ *               warnings:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               features:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     url:
+ *                       type: string
+ *                     alt:
+ *                       type: string
+ *                     isPrimary:
+ *                       type: boolean
  *           example:
  *             name: "Vitamin C Serum"
- *             description: "Powerful antioxidant serum"
+ *             description: "Serum vitamin C 20% giúp làm sáng da và chống lão hóa"
+ *             category: "Skincare"
+ *             subcategory: "serum"
+ *             isPopular: true
  *             benefits: ["Brightening", "Anti-aging"]
  *             skinType: ["all"]
  *             size: "30ml"
- *             category: "Skincare"
  *             brand: ["The Ordinary", "CeraVe"]
  *             price: 299
  *             stockQuantity: 100
@@ -450,11 +547,49 @@ router.get("/:id", async (req, res) => {
  *             ]
  *     responses:
  *       201:
- *         description: Product   d successfully
+ *         description: Product created successfully
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Product'
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *                     category:
+ *                       type: string
+ *                     subcategory:
+ *                       type: string
+ *                     isPopular:
+ *                       type: boolean
+ *                     benefits:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     skinType:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     size:
+ *                       type: string
+ *                     price:
+ *                       type: number
+ *                     stockQuantity:
+ *                       type: number
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
  *       400:
  *         description: Invalid input
  *       401:
