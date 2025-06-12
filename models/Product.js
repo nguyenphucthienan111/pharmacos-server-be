@@ -75,14 +75,6 @@ const productSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: [
-        "Pharmaceuticals",
-        "Skincare",
-        "Haircare",
-        "Makeup",
-        "Fragrances",
-        "Natural Products",
-      ],
     },
     subcategory: {
       type: String,

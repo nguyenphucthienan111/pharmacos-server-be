@@ -55,7 +55,6 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *           description: Product size/volume
  *         category:
  *           type: string
- *           enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Natural Products]
  *           description: Product category
  *         brand:
  *           type: array
@@ -926,7 +925,6 @@ router.post("/search/image", async (req, res) => {
  *                 type: string
  *               category:
  *                 type: string
- *                 enum: [Pharmaceuticals, Skincare, Haircare, Makeup, Fragrances, Personal Care]
  *               brand:
  *                 type: array
  *                 items:
