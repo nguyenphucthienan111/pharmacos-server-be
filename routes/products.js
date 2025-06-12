@@ -1003,12 +1003,27 @@ router.post("/search/image", async (req, res) => {
  *                 type: number
  *               stockQuantity:
  *                 type: number
+ *               manufacturingDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Manufacturing date of the product (YYYY-MM-DD)
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Expiry date of the product (YYYY-MM-DD)
+ *               stockDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Date when product was added to stock (YYYY-MM-DD)
  *               aiFeatures:
  *                 type: object
  *           example:
  *             name: "Updated Product Name"
  *             price: 399
  *             stockQuantity: 200
+ *             manufacturingDate: "2025-01-01"
+ *             expiryDate: "2027-01-01"
+ *             stockDate: "2025-06-13"
  *     responses:
  *       200:
  *         description: Product updated successfully
@@ -1039,6 +1054,9 @@ router.patch(
         "imageUrl",
         "price",
         "stockQuantity",
+        "manufacturingDate",
+        "expiryDate",
+        "stockDate",
       ];
 
       // Only include fields that are present in the request body
@@ -1047,6 +1065,55 @@ router.patch(
           updateFields[field] = req.body[field];
         }
       });
+
+      // Validate dates if they are being updated
+      const today = new Date();
+
+      if (updateFields.manufacturingDate) {
+        const mfgDate = new Date(updateFields.manufacturingDate);
+        if (isNaN(mfgDate.getTime())) {
+          return res.status(400).json({
+            message: "Invalid manufacturing date format. Use YYYY-MM-DD format",
+          });
+        }
+        if (mfgDate > today) {
+          return res.status(400).json({
+            message: "Manufacturing date cannot be in the future",
+          });
+        }
+      }
+
+      if (updateFields.expiryDate) {
+        const expDate = new Date(updateFields.expiryDate);
+        const mfgDate = updateFields.manufacturingDate
+          ? new Date(updateFields.manufacturingDate)
+          : product.manufacturingDate;
+
+        if (isNaN(expDate.getTime())) {
+          return res.status(400).json({
+            message: "Invalid expiry date format. Use YYYY-MM-DD format",
+          });
+        }
+        if (expDate <= mfgDate) {
+          return res.status(400).json({
+            message: "Expiry date must be after manufacturing date",
+          });
+        }
+      }
+
+      if (updateFields.stockDate) {
+        const stkDate = new Date(updateFields.stockDate);
+        if (isNaN(stkDate.getTime())) {
+          return res.status(400).json({
+            message: "Invalid stock date format. Use YYYY-MM-DD format",
+          });
+        }
+        if (stkDate > today) {
+          return res.status(400).json({
+            message: "Stock date cannot be in the future",
+          });
+        }
+      }
 
       // Handle aiFeatures separately since it's a Map
       if (req.body.aiFeatures) {
