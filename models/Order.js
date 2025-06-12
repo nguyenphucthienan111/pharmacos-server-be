@@ -7,6 +7,11 @@ const orderSchema = new mongoose.Schema(
       ref: "Customer",
       required: true,
     },
+    staffId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SaleStaff",
+      required: false,
+    },
     orderDate: {
       type: Date,
       required: true,

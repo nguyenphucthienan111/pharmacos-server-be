@@ -67,35 +67,58 @@ const { authorize } = require("../middleware/auth");
  */
 router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
   try {
-    try {
-      let query = {};
+    let query = {};
 
-      if (req.user.role === "customer") {
-        // Customers can only see their own orders
-        query = { customerId: req.user.profileId };
-      }
-
-      const orders = await Order.find(query)
-        .sort({ orderDate: -1 })
-        .populate("customerId", "name email");
-
-      // Add order details for each order
-      const ordersWithDetails = await Promise.all(
-        orders.map(async (order) => {
-          const orderDetails = await OrderDetail.find({
-            orderId: order._id,
-          }).populate("productId", "name price");
-          return {
-            ...order.toObject(),
-            items: orderDetails,
-          };
-        })
-      );
-
-      res.json(ordersWithDetails);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+    if (req.user.role === "customer") {
+      // Customers can only see their own orders
+      query = { customerId: req.user.profileId };
     }
+
+    // Get all orders or customer's orders
+    const orders = await Order.find(query)
+      .sort({ orderDate: -1 })
+      .populate("customerId", "name email");
+
+    // For each order, get details and check products
+    const ordersWithDetails = await Promise.all(
+      orders.map(async (order) => {
+        // Get order details with product info
+        const orderDetails = await OrderDetail.find({
+          orderId: order._id,
+        }).populate({
+          path: "productId",
+          select: "name price createdBy",
+        });
+
+        // For debugging
+        console.log("Order details:", JSON.stringify(orderDetails, null, 2));
+        console.log("Staff ID:", req.user.profileId);
+
+        // If staff, check if they are selling any product in this order
+        if (req.user.role === "staff") {
+          const hasCreatedProduct = orderDetails.some((detail) => {
+            // For debugging
+            console.log("Product:", detail.productId);
+            console.log("Created by:", detail.productId?.createdBy);
+            console.log("Staff ID:", req.user.id); // Sử dụng id thay vì profileId
+            return detail.productId?.createdBy?.toString() === req.user.id;
+          });
+
+          // Skip this order if staff didn't create any products in it
+          if (!hasCreatedProduct) return null;
+        }
+
+        return {
+          ...order.toObject(),
+          items: orderDetails,
+        };
+      })
+    );
+
+    // Filter out null orders (orders staff can't see)
+    const filteredOrders = ordersWithDetails.filter((order) => order !== null);
+
+    res.json(filteredOrders);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -136,7 +159,7 @@ router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
  *       404:
  *         description: Order not found
  */
-router.get("/:id", async (req, res) => {
+router.get("/:id", authorize(["customer", "staff"]), async (req, res) => {
   try {
     const order = await Order.findById(req.params.id).populate(
       "customerId",
@@ -147,16 +170,29 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    if (
-      req.user.role === "customer" &&
-      order.customerId?.toString() !== req.user.profileId
-    ) {
-      return res.status(403).json({ message: "Unauthorized access" });
-    }
-
     const orderDetails = await OrderDetail.find({
       orderId: order._id,
-    }).populate("productId", "name imageUrl");
+    }).populate({
+      path: "productId",
+      select: "name price createdBy",
+    });
+
+    // Check permissions
+    if (req.user.role === "customer") {
+      // Customers can only see their own orders
+      if (order.customerId?.toString() !== req.user.profileId) {
+        return res.status(403).json({ message: "Unauthorized access" });
+      }
+    } else if (req.user.role === "staff") {
+      // Staff can only see orders with products they created
+      const hasCreatedProduct = orderDetails.some((detail) => {
+        return detail.productId?.createdBy?.toString() === req.user.id;
+      });
+
+      if (!hasCreatedProduct) {
+        return res.status(403).json({ message: "Unauthorized access" });
+      }
+    }
 
     res.json({
       order,
@@ -346,7 +382,7 @@ router.patch("/:id/status", authorize(["staff", "admin"]), async (req, res) => {
  *       404:
  *         description: Order not found
  */
-router.post("/:id/cancel", async (req, res) => {
+router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
@@ -354,10 +390,7 @@ router.post("/:id/cancel", async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    if (
-      req.user.role === "customer" &&
-      order.customerId?.toString() !== req.user.profileId
-    ) {
+    if (order.customerId?.toString() !== req.user.profileId) {
       return res.status(403).json({ message: "Unauthorized access" });
     }
 
@@ -367,17 +400,23 @@ router.post("/:id/cancel", async (req, res) => {
       });
     }
 
-    order.status = "cancelled";
-    await order.save();
-
+    // Get order details before deletion
     const orderDetails = await OrderDetail.find({ orderId: order._id });
+
+    // Return products to stock
     for (const detail of orderDetails) {
       await Product.findByIdAndUpdate(detail.productId, {
         $inc: { stockQuantity: detail.quantity },
       });
     }
 
-    res.json({ message: "Order cancelled successfully" });
+    // Delete order details
+    await OrderDetail.deleteMany({ orderId: order._id });
+
+    // Delete the order
+    await Order.findByIdAndDelete(order._id);
+
+    res.json({ message: "Order cancelled and removed successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
