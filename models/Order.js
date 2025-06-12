@@ -5,7 +5,32 @@ const orderSchema = new mongoose.Schema(
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
+      required: false,
+    },
+    recipientName: {
+      type: String,
       required: true,
+      trim: true,
+    },
+    phone: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    shippingAddress: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    note: {
+      type: String,
+      required: false,
+      trim: true,
     },
     staffId: {
       type: mongoose.Schema.Types.ObjectId,

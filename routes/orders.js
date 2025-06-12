@@ -243,6 +243,9 @@ router.get("/:id", authorize(["customer", "staff"]), async (req, res) => {
  *                 type: array
  *                 items:
  *                   $ref: '#/components/schemas/OrderItem'
+ *               note:
+ *                 type: string
+ *                 description: Optional note for the order (e.g., "Please call 15 minutes before delivery")
  *     responses:
  *       201:
  *         description: Order created successfully
@@ -291,6 +294,7 @@ router.post("/", authorize(["customer"]), async (req, res) => {
       customerId: req.user.profileId,
       status: "pending",
       totalAmount: totalAmount,
+      note: req.body.note,
     });
     await order.save();
 
