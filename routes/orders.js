@@ -94,20 +94,24 @@ router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
         console.log("Order details:", JSON.stringify(orderDetails, null, 2));
         console.log("Staff ID:", req.user.profileId);
 
-        // If staff, check if they are selling any product in this order
+        // If staff, filter to only show their products
         if (req.user.role === "staff") {
-          const hasCreatedProduct = orderDetails.some((detail) => {
-            // For debugging
-            console.log("Product:", detail.productId);
-            console.log("Created by:", detail.productId?.createdBy);
-            console.log("Staff ID:", req.user.id); // Sử dụng id thay vì profileId
-            return detail.productId?.createdBy?.toString() === req.user.id;
-          });
+          // Filter products created by this staff
+          const staffProducts = orderDetails.filter(
+            (detail) => detail.productId?.createdBy?.toString() === req.user.id
+          );
 
-          // Skip this order if staff didn't create any products in it
-          if (!hasCreatedProduct) return null;
+          // Skip if no products from this staff
+          if (staffProducts.length === 0) return null;
+
+          // Return order with only staff's products
+          return {
+            ...order.toObject(),
+            items: staffProducts,
+          };
         }
 
+        // For customer, return all products
         return {
           ...order.toObject(),
           items: orderDetails,
@@ -184,16 +188,24 @@ router.get("/:id", authorize(["customer", "staff"]), async (req, res) => {
         return res.status(403).json({ message: "Unauthorized access" });
       }
     } else if (req.user.role === "staff") {
-      // Staff can only see orders with products they created
-      const hasCreatedProduct = orderDetails.some((detail) => {
-        return detail.productId?.createdBy?.toString() === req.user.id;
-      });
+      // Filter products created by this staff
+      const staffProducts = orderDetails.filter(
+        (detail) => detail.productId?.createdBy?.toString() === req.user.id
+      );
 
-      if (!hasCreatedProduct) {
+      if (staffProducts.length === 0) {
         return res.status(403).json({ message: "Unauthorized access" });
       }
+
+      // Return order with only staff's products
+      res.json({
+        order,
+        items: staffProducts,
+      });
+      return;
     }
 
+    // For customer, return all products
     res.json({
       order,
       items: orderDetails,
