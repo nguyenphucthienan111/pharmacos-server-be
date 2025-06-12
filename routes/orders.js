@@ -128,7 +128,7 @@ router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
  * @swagger
  * /api/orders/{id}:
  *   get:
- *     summary: Get order details by ID
+ *     summary: Get order details by orderID
  *     tags: [Orders]
  *     security:
  *       - bearerAuth: []

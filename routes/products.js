@@ -822,9 +822,7 @@ router.post("/:id/reviews", authenticateToken, async (req, res) => {
 router.get("/:id/reviews", async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const product = await Product.findById(req.params.id)
-      .populate("reviews.userId", "username email")
-      .select("reviews");
+    const product = await Product.findById(req.params.id).select("reviews");
 
     if (!product) {
       return res.status(404).json({
@@ -841,7 +839,14 @@ router.get("/:id/reviews", async (req, res) => {
     // Sort reviews by date (newest first) and paginate
     const paginatedReviews = product.reviews
       .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(startIndex, endIndex);
+      .slice(startIndex, endIndex)
+      .map((review) => ({
+        userId: review.userId,
+        rating: review.rating,
+        comment: review.comment,
+        _id: review._id,
+        createdAt: review.createdAt,
+      }));
 
     res.json({
       success: true,
