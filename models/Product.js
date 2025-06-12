@@ -8,18 +8,24 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
     ingredients: [
-      {
-        name: {
-          type: String,
-          required: true,
+      new mongoose.Schema(
+        {
+          name: {
+            type: String,
+            required: true,
+          },
+          percentage: {
+            type: Number,
+            min: 0,
+            max: 100,
+          },
+          purpose: String,
         },
-        percentage: {
-          type: Number,
-          min: 0,
-          max: 100,
-        },
-        purpose: String,
-      },
+        {
+          _id: true,
+          id: false, // Explicitly disable id virtual for ingredients
+        }
+      ),
     ],
     instructions: {
       type: String,
@@ -30,24 +36,30 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
     reviews: [
-      {
-        userId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Customer",
-          required: true,
+      new mongoose.Schema(
+        {
+          userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Customer",
+            required: true,
+          },
+          rating: {
+            type: Number,
+            required: true,
+            min: 1,
+            max: 5,
+          },
+          comment: String,
+          createdAt: {
+            type: Date,
+            default: Date.now,
+          },
         },
-        rating: {
-          type: Number,
-          required: true,
-          min: 1,
-          max: 5,
-        },
-        comment: String,
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
+        {
+          _id: true,
+          id: false, // Explicitly disable id virtual for reviews
+        }
+      ),
     ],
     name: {
       type: String,
@@ -94,17 +106,23 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
     images: [
-      {
-        url: {
-          type: String,
-          required: true,
+      new mongoose.Schema(
+        {
+          url: {
+            type: String,
+            required: true,
+          },
+          alt: String,
+          isPrimary: {
+            type: Boolean,
+            default: false,
+          },
         },
-        alt: String,
-        isPrimary: {
-          type: Boolean,
-          default: false,
-        },
-      },
+        {
+          _id: true,
+          id: false, // Explicitly disable id virtual for images
+        }
+      ),
     ],
     price: {
       type: Number,
@@ -133,8 +151,9 @@ const productSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
+    toJSON: { virtuals: true, versionKey: false },
     toObject: { virtuals: true },
+    id: false, // Disable `id` virtual for the main document and subdocuments
   }
 );
 
