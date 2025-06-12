@@ -47,107 +47,6 @@ const { authorize } = require("../middleware/auth");
 
 /**
  * @swagger
- * /api/orders:
- *   get:
- *     summary: Get all orders (staff only)
- *     tags: [Orders]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: startDate
- *         schema:
- *           type: string
- *           format: date
- *       - in: query
- *         name: endDate
- *         schema:
- *           type: string
- *           format: date
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *       - in: query
- *         name: orderType
- *         schema:
- *           type: string
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *     responses:
- *       200:
- *         description: Orders retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 orders:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Order'
- *                 totalPages:
- *                   type: integer
- *                 currentPage:
- *                   type: integer
- *                 total:
- *                   type: integer
- *       401:
- *         description: Not authenticated
- *       403:
- *         description: Not authorized
- */
-router.get("/", authorize(["staff", "admin"]), async (req, res) => {
-  try {
-    const {
-      startDate,
-      endDate,
-      status,
-      orderType,
-      page = 1,
-      limit = 10,
-    } = req.query;
-
-    const filter = {};
-    if (startDate && endDate) {
-      filter.orderDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
-    }
-    if (status) filter.status = status;
-    if (orderType) filter.orderType = orderType;
-
-    const orders = await Order.find(filter)
-      .sort({ orderDate: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .populate("customerId", "name email")
-      .populate("staffId", "name");
-
-    const total = await Order.countDocuments(filter);
-
-    res.json({
-      orders,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      total,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
  * /api/orders/my-orders:
  *   get:
  *     summary: Get customer's order history
@@ -166,13 +65,37 @@ router.get("/", authorize(["staff", "admin"]), async (req, res) => {
  *       401:
  *         description: Not authenticated
  */
-router.get("/my-orders", authorize(["customer"]), async (req, res) => {
+router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
   try {
-    const orders = await Order.find({ customerId: req.user.profileId })
-      .sort({ orderDate: -1 })
-      .populate("staffId", "name");
+    try {
+      let query = {};
 
-    res.json(orders);
+      if (req.user.role === "customer") {
+        // Customers can only see their own orders
+        query = { customerId: req.user.profileId };
+      }
+
+      const orders = await Order.find(query)
+        .sort({ orderDate: -1 })
+        .populate("customerId", "name email");
+
+      // Add order details for each order
+      const ordersWithDetails = await Promise.all(
+        orders.map(async (order) => {
+          const orderDetails = await OrderDetail.find({
+            orderId: order._id,
+          }).populate("productId", "name price");
+          return {
+            ...order.toObject(),
+            items: orderDetails,
+          };
+        })
+      );
+
+      res.json(ordersWithDetails);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -215,9 +138,10 @@ router.get("/my-orders", authorize(["customer"]), async (req, res) => {
  */
 router.get("/:id", async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate("customerId", "name email")
-      .populate("staffId", "name");
+    const order = await Order.findById(req.params.id).populate(
+      "customerId",
+      "name email"
+    );
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -260,8 +184,6 @@ router.get("/:id", async (req, res) => {
  *             required:
  *               - items
  *             properties:
- *               customerId:
- *                 type: string
  *               items:
  *                 type: array
  *                 items:
@@ -285,10 +207,11 @@ router.get("/:id", async (req, res) => {
  *       401:
  *         description: Not authenticated
  */
-router.post("/", async (req, res) => {
+router.post("/", authorize(["customer"]), async (req, res) => {
   try {
-    const { items, customerId } = req.body;
+    const { items } = req.body;
 
+    // Validate products and stock
     for (const item of items) {
       const product = await Product.findById(item.productId);
       if (!product) {
@@ -303,12 +226,16 @@ router.post("/", async (req, res) => {
       }
     }
 
+    // Calculate total amount
+    let totalAmount = items.reduce(
+      (sum, item) => sum + item.quantity * item.unitPrice,
+      0
+    );
+
     const order = new Order({
-      customerId: customerId || null,
-      staffId: req.user.profileId,
-      orderType: customerId ? "Online" : "POS",
+      customerId: req.user.profileId,
       status: "pending",
-      totalAmount: 0,
+      totalAmount: totalAmount,
     });
     await order.save();
 
@@ -324,9 +251,10 @@ router.post("/", async (req, res) => {
       orderDetails.push(detail);
     }
 
-    const completeOrder = await Order.findById(order._id)
-      .populate("customerId", "name email")
-      .populate("staffId", "name");
+    const completeOrder = await Order.findById(order._id).populate(
+      "customerId",
+      "name email"
+    );
 
     res.status(201).json({
       order: completeOrder,

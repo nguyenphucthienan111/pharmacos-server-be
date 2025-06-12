@@ -5,17 +5,7 @@ const orderSchema = new mongoose.Schema(
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
-      // Optional for guest purchases
-    },
-    staffId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "SaleStaff",
       required: true,
-    },
-    orderType: {
-      type: String,
-      required: true,
-      enum: ["Online", "POS"],
     },
     orderDate: {
       type: Date,
