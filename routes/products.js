@@ -725,7 +725,7 @@ router.post("/:id/reviews", authenticateToken, async (req, res) => {
 
     // Check if user has already reviewed
     const existingReview = product.reviews.find(
-      (review) => review.userId.toString() === req.user.id
+      (review) => review.userId?.toString() === req.user.profileId
     );
     if (existingReview) {
       return res.status(400).json({
@@ -734,18 +734,18 @@ router.post("/:id/reviews", authenticateToken, async (req, res) => {
       });
     }
 
-    product.reviews.push({
-      userId: req.user.id,
+    const newReview = {
+      userId: req.user.profileId,
       rating,
       comment,
-    });
+    };
 
+    product.reviews.push(newReview);
     await product.save();
-    await product.populate("reviews.userId", "username email");
 
     res.json({
       success: true,
-      data: product.reviews[product.reviews.length - 1],
+      data: newReview,
     });
   } catch (error) {
     res.status(500).json({
