@@ -135,6 +135,19 @@ const productSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    manufacturingDate: {
+      type: Date,
+      required: true,
+    },
+    expiryDate: {
+      type: Date,
+      required: true,
+    },
+    stockDate: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
     salesHistory: [
       {
         month: Number,

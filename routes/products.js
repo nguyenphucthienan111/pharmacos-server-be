@@ -445,6 +445,8 @@ router.get("/:id", async (req, res) => {
  *               - brand
  *               - price
  *               - instructions
+ *               - manufacturingDate
+ *               - expiryDate
  *             properties:
  *               name:
  *                 type: string
@@ -487,6 +489,18 @@ router.get("/:id", async (req, res) => {
  *                       type: string
  *               instructions:
  *                 type: string
+ *               manufacturingDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Manufacturing date of the product
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Expiry date of the product
+ *               stockDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Date when product was added to stock (defaults to current date)
  *               warnings:
  *                 type: array
  *                 items:
@@ -509,6 +523,8 @@ router.get("/:id", async (req, res) => {
  *           example:
  *             name: "Vitamin C Serum"
  *             description: "Serum vitamin C 20% giúp làm sáng da và chống lão hóa"
+ *             manufacturingDate: "2025-01-01"
+ *             expiryDate: "2027-01-01"
  *             category: "Skincare"
  *             subcategory: "serum"
  *             isPopular: true
@@ -610,10 +626,53 @@ router.post(
           .json({ message: "User authentication required" });
       }
 
+      // Validate required date fields
+      const { manufacturingDate, expiryDate, stockDate } = req.body;
+      if (!manufacturingDate || !expiryDate) {
+        return res.status(400).json({
+          message: "Manufacturing date and expiry date are required",
+        });
+      }
+
+      // Validate date formats and logic
+      const mfgDate = new Date(manufacturingDate);
+      const expDate = new Date(expiryDate);
+      const stkDate = stockDate ? new Date(stockDate) : new Date();
+      const today = new Date();
+
+      if (
+        isNaN(mfgDate.getTime()) ||
+        isNaN(expDate.getTime()) ||
+        (stockDate && isNaN(stkDate.getTime()))
+      ) {
+        return res.status(400).json({
+          message: "Invalid date format. Use YYYY-MM-DD format",
+        });
+      }
+
+      if (mfgDate > today) {
+        return res.status(400).json({
+          message: "Manufacturing date cannot be in the future",
+        });
+      }
+
+      if (expDate <= mfgDate) {
+        return res.status(400).json({
+          message: "Expiry date must be after manufacturing date",
+        });
+      }
+
+      if (stkDate > today) {
+        return res.status(400).json({
+          message: "Stock date cannot be in the future",
+        });
+      }
+
       // Add createdBy field and convert aiFeatures to Map format
       const productData = {
         ...req.body,
         createdBy: req.user.id, // Using id from JWT token
+        stockDate: stkDate, // Use provided stock date or current date
         aiFeatures: new Map(Object.entries(req.body.aiFeatures || {})),
       };
 
