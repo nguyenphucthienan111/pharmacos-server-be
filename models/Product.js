@@ -7,11 +7,6 @@ const productSchema = new mongoose.Schema(
       ref: "Account",
       required: true,
     },
-    staffId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "SaleStaff",
-      required: true,
-    },
     ingredients: [
       new mongoose.Schema(
         {
