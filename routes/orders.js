@@ -174,41 +174,48 @@ router.get("/:id", authorize(["customer", "staff"]), async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Check permissions for customer first
+    if (req.user.role === "customer") {
+      if (order.customerId?.toString() !== req.user.profileId) {
+        return res.status(403).json({ message: "Unauthorized access" });
+      }
+      // Get all products for customer
+      const orderDetails = await OrderDetail.find({
+        orderId: order._id,
+      }).populate({
+        path: "productId",
+        select: "name price createdBy",
+      });
+
+      return res.json({
+        order,
+        items: orderDetails,
+      });
+    }
+
+    // For staff, only get their products
     const orderDetails = await OrderDetail.find({
       orderId: order._id,
     }).populate({
       path: "productId",
       select: "name price createdBy",
+      match: { createdBy: req.user.id },
     });
 
-    // Check permissions
-    if (req.user.role === "customer") {
-      // Customers can only see their own orders
-      if (order.customerId?.toString() !== req.user.profileId) {
-        return res.status(403).json({ message: "Unauthorized access" });
-      }
-    } else if (req.user.role === "staff") {
-      // Filter products created by this staff
-      const staffProducts = orderDetails.filter(
-        (detail) => detail.productId?.createdBy?.toString() === req.user.id
-      );
+    // Remove entries where productId is null (products not created by staff)
+    const staffProducts = orderDetails.filter(
+      (detail) => detail.productId !== null
+    );
 
-      if (staffProducts.length === 0) {
-        return res.status(403).json({ message: "Unauthorized access" });
-      }
-
-      // Return order with only staff's products
-      res.json({
-        order,
-        items: staffProducts,
+    if (staffProducts.length === 0) {
+      return res.status(403).json({
+        message: "No products found in this order that were created by you",
       });
-      return;
     }
 
-    // For customer, return all products
-    res.json({
+    return res.json({
       order,
-      items: orderDetails,
+      items: staffProducts,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -349,18 +356,39 @@ router.post("/", authorize(["customer"]), async (req, res) => {
  *       404:
  *         description: Order not found
  */
-router.patch("/:id/status", authorize(["staff", "admin"]), async (req, res) => {
+router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
 
+    // Find order
+    const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
+
+    // Get order details and check if staff created any products
+    const orderDetails = await OrderDetail.find({
+      orderId: order._id,
+    }).populate({
+      path: "productId",
+      select: "createdBy",
+    });
+
+    // Check if staff created any products in this order
+    const hasCreatedProduct = orderDetails.some(
+      (detail) => detail.productId?.createdBy?.toString() === req.user.id
+    );
+
+    if (!hasCreatedProduct) {
+      return res.status(403).json({
+        message:
+          "You can only update status of orders containing products you created",
+      });
+    }
+
+    // Update order status
+    order.status = status;
+    await order.save();
 
     res.json(order);
   } catch (error) {
