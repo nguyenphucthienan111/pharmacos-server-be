@@ -132,7 +132,7 @@ router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
  * @swagger
  * /api/orders/{id}:
  *   get:
- *     summary: Get order details by orderID
+ *     summary: Get order details by orderID (Staff)
  *     tags: [Orders]
  *     security:
  *       - bearerAuth: []
@@ -238,7 +238,19 @@ router.get("/:id", authorize(["customer", "staff"]), async (req, res) => {
  *             type: object
  *             required:
  *               - items
+ *               - recipientName
+ *               - phone
+ *               - shippingAddress
  *             properties:
+ *               recipientName:
+ *                 type: string
+ *                 description: Name of the recipient
+ *               phone:
+ *                 type: string
+ *                 description: Contact phone number
+ *               shippingAddress:
+ *                 type: string
+ *                 description: Delivery address
  *               items:
  *                 type: array
  *                 items:
@@ -292,6 +304,9 @@ router.post("/", authorize(["customer"]), async (req, res) => {
 
     const order = new Order({
       customerId: req.user.profileId,
+      recipientName: req.body.recipientName,
+      phone: req.body.phone,
+      shippingAddress: req.body.shippingAddress,
       status: "pending",
       totalAmount: totalAmount,
       note: req.body.note,
