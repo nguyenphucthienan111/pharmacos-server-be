@@ -145,7 +145,7 @@ router.post("/items", authenticateToken, async (req, res) => {
 
     await cart.save();
 
-    // Return only the added/updated item
+    // Return only the added/updated item with subtotal
     const addedItem = await CartItem.findById(cartItem._id).populate({
       path: "productId",
       select: "name price image",
@@ -153,7 +153,10 @@ router.post("/items", authenticateToken, async (req, res) => {
 
     res.status(201).json({
       message: "Item added to cart successfully",
-      item: addedItem,
+      item: {
+        ...addedItem.toObject(),
+        subtotal: addedItem.quantity * addedItem.unitPrice,
+      },
     });
   } catch (error) {
     console.error("Error in POST /cart/items:", error);
@@ -262,7 +265,10 @@ router.put("/items/:id", authenticateToken, async (req, res) => {
 
     res.json({
       message: "Cart item updated successfully",
-      item: updatedItem,
+      item: {
+        ...updatedItem.toObject(),
+        subtotal: updatedItem.quantity * updatedItem.unitPrice,
+      },
     });
   } catch (error) {
     res.status(400).json({ message: error.message });
