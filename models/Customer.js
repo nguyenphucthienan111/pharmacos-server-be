@@ -10,7 +10,6 @@ const customerSchema = new mongoose.Schema(
     dateOfBirth: Date,
     email: {
       type: String,
-      unique: true,
       required: true,
     },
     phone: {
@@ -40,6 +39,10 @@ const customerSchema = new mongoose.Schema(
     accountId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Account",
+    },
+    isDefault: {
+      type: Boolean,
+      default: false,
     },
   },
   {

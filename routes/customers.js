@@ -72,12 +72,23 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
     const customer = await Customer.findById(req.user.profileId).select(
       "-accountId"
     );
-
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
 
-    res.json(customer);
+    const addresses = await Customer.find({
+      accountId: req.user.id,
+      _id: { $ne: req.user.profileId },
+    }).select("-accountId");
+
+    const defaultAddress =
+      addresses.find((addr) => addr.isDefault) || addresses[0] || null;
+
+    res.json({
+      ...customer.toObject(),
+      addresses: addresses.map((addr) => addr.toObject()),
+      defaultAddress: defaultAddress ? defaultAddress.toObject() : null,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -111,6 +122,7 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
  *       404:
  *         description: Customer not found
  */
+// PATCH /api/customers/profile
 router.patch("/profile", authorize(["customer"]), async (req, res) => {
   try {
     const updateFields = {};
@@ -124,9 +136,9 @@ router.patch("/profile", authorize(["customer"]), async (req, res) => {
       district,
       ward,
       addressType,
+      isDefault,
     } = req.body;
 
-    // Cập nhật các trường có trong body
     const fields = [
       "name",
       "gender",
@@ -137,12 +149,17 @@ router.patch("/profile", authorize(["customer"]), async (req, res) => {
       "district",
       "ward",
       "addressType",
+      "isDefault",
     ];
     fields.forEach((field) => {
       if (req.body[field] !== undefined) {
         updateFields[field] = req.body[field];
       }
     });
+
+    if ("isDefault" in req.body) {
+      updateFields.isDefault = !!req.body.isDefault;
+    }
 
     const customer = await Customer.findByIdAndUpdate(
       req.user.profileId,
@@ -266,6 +283,50 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
     await account.save();
 
     res.json({ message: "Password changed successfully" });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+// Update address by id
+router.patch("/addresses/:id", authorize(["customer"]), async (req, res) => {
+  try {
+    const updateFields = {};
+    const fields = [
+      "name",
+      "gender",
+      "dateOfBirth",
+      "phone",
+      "address",
+      "city",
+      "district",
+      "ward",
+      "addressType",
+      "isDefault",
+    ];
+    fields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateFields[field] = req.body[field];
+      }
+    });
+
+    const customer = new Customer({
+      name,
+      gender,
+      dateOfBirth,
+      phone,
+      address,
+      city,
+      district,
+      ward,
+      addressType,
+      isDefault: !!isDefault,
+      accountId: req.user.id,
+      email: account.email || email || "user@example.com",
+    });
+
+    await customer.save();
+    res.status(201).json(customer);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
