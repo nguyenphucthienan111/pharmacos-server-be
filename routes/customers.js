@@ -69,25 +69,32 @@ const { authorize } = require("../middleware/auth");
  */
 router.get("/profile", authorize(["customer"]), async (req, res) => {
   try {
-    const customer = await Customer.findById(req.user.profileId).select(
+    const customer = await Customer.findOne({ accountId: req.user.id }).select(
       "-accountId"
     );
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
 
-    const addresses = await Customer.find({
-      accountId: req.user.id,
-      _id: { $ne: req.user.profileId },
-    }).select("-accountId");
-
-    const defaultAddress =
-      addresses.find((addr) => addr.isDefault) || addresses[0] || null;
+    let defaultAddress = null;
+    if (customer.addresses && customer.addresses.length > 0) {
+      defaultAddress =
+        customer.addresses.find((addr) => addr.isDefault) ||
+        customer.addresses[0];
+    }
 
     res.json({
       ...customer.toObject(),
-      addresses: addresses.map((addr) => addr.toObject()),
-      defaultAddress: defaultAddress ? defaultAddress.toObject() : null,
+      address: defaultAddress ? defaultAddress.address : "",
+      city: defaultAddress ? defaultAddress.city : "",
+      district: defaultAddress ? defaultAddress.district : "",
+      ward: defaultAddress ? defaultAddress.ward : "",
+      addressType: defaultAddress ? defaultAddress.addressType : "",
+      isDefault: defaultAddress ? defaultAddress.isDefault : false,
+      phone: defaultAddress ? defaultAddress.phone : customer.phone,
+      name: defaultAddress ? defaultAddress.name : customer.name,
+      addresses: customer.addresses,
+      defaultAddress: defaultAddress,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -288,32 +295,91 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
   }
 });
 
+router.get("/addresses", authorize(["customer"]), async (req, res) => {
+  try {
+    const customer = await Customer.findOne({ accountId: req.user.id }).select(
+      "addresses"
+    );
+    if (!customer) {
+      return res.status(404).json({ message: "No addresses found" });
+    }
+    res.json(customer.addresses);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Update address by id
 router.patch("/addresses/:id", authorize(["customer"]), async (req, res) => {
   try {
-    const updateFields = {};
-    const fields = [
-      "name",
-      "gender",
-      "dateOfBirth",
-      "phone",
-      "address",
-      "city",
-      "district",
-      "ward",
-      "addressType",
-      "isDefault",
-    ];
-    fields.forEach((field) => {
-      if (req.body[field] !== undefined) {
-        updateFields[field] = req.body[field];
-      }
-    });
-
-    const customer = new Customer({
+    const {
       name,
-      gender,
-      dateOfBirth,
+      phone,
+      address,
+      city,
+      district,
+      ward,
+      addressType,
+      isDefault,
+    } = req.body;
+
+    if (isDefault) {
+      await Customer.updateOne(
+        { accountId: req.user.id },
+        { $set: { "addresses.$[].isDefault": false } }
+      );
+    }
+
+    const customer = await Customer.findOneAndUpdate(
+      { accountId: req.user.id, "addresses._id": req.params.id },
+      {
+        $set: {
+          "addresses.$.name": name,
+          "addresses.$.phone": phone,
+          "addresses.$.address": address,
+          "addresses.$.city": city,
+          "addresses.$.district": district,
+          "addresses.$.ward": ward,
+          "addresses.$.addressType": addressType,
+          "addresses.$.isDefault": !!isDefault,
+        },
+      },
+      { new: true }
+    );
+    if (!customer) {
+      return res.status(404).json({ message: "Address not found" });
+    }
+    const updatedAddr = customer.addresses.find(
+      (a) => a._id.toString() === req.params.id
+    );
+    res.json(updatedAddr);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+router.post("/addresses", authorize(["customer"]), async (req, res) => {
+  try {
+    const {
+      name,
+      phone,
+      address,
+      city,
+      district,
+      ward,
+      addressType,
+      isDefault,
+    } = req.body;
+
+    if (isDefault) {
+      await Customer.updateOne(
+        { accountId: req.user.id },
+        { $set: { "addresses.$[].isDefault": false } }
+      );
+    }
+
+    const addressObj = {
+      name,
       phone,
       address,
       city,
@@ -321,14 +387,45 @@ router.patch("/addresses/:id", authorize(["customer"]), async (req, res) => {
       ward,
       addressType,
       isDefault: !!isDefault,
-      accountId: req.user.id,
-      email: account.email || email || "user@example.com",
-    });
+    };
 
-    await customer.save();
-    res.status(201).json(customer);
+    let customer = await Customer.findOne({ accountId: req.user.id });
+    if (!customer) {
+      customer = new Customer({
+        name: req.user.name || "",
+        email: req.user.email || "",
+        phone: phone || "",
+        accountId: req.user.id,
+        addresses: [addressObj],
+      });
+      await customer.save();
+      return res.status(201).json(customer.addresses[0]);
+    }
+
+    const updated = await Customer.findOneAndUpdate(
+      { accountId: req.user.id },
+      { $push: { addresses: addressObj } },
+      { new: true }
+    );
+    res.status(201).json(updated.addresses[updated.addresses.length - 1]);
   } catch (error) {
     res.status(400).json({ message: error.message });
+  }
+});
+
+router.delete("/addresses/:id", authorize(["customer"]), async (req, res) => {
+  try {
+    const customer = await Customer.findOneAndUpdate(
+      { accountId: req.user.id },
+      { $pull: { addresses: { _id: req.params.id } } },
+      { new: true }
+    );
+    if (!customer) {
+      return res.status(404).json({ message: "Address not found" });
+    }
+    res.json({ message: "Address deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 });
 
