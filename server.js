@@ -76,7 +76,7 @@ const authRoutes = require("./routes/auth");
 const customerRoutes = require("./routes/customers");
 const productRoutes = require("./routes/products");
 const orderRoutes = require("./routes/orders");
-const guestOrderRoutes = require("./routes/guestOrders");
+const cartRoutes = require("./routes/cart");
 const aiRoutes = require("./routes/ai");
 const adminRoutes = require("./routes/admin");
 const staffRoutes = require("./routes/staff");
@@ -85,8 +85,8 @@ const staffRoutes = require("./routes/staff");
 app.use("/api/auth", authRoutes);
 app.use("/api/customers", authenticateToken, customerRoutes);
 app.use("/api/products", productRoutes); // Public access for products
-app.use("/api/guest-orders", guestOrderRoutes); // Public access for guest orders
 app.use("/api/orders", authenticateToken, orderRoutes);
+app.use("/api/cart", cartRoutes); // Cart management
 app.use("/api/ai", aiRoutes); // AI features
 app.use("/api/admin", authenticateToken, adminRoutes);
 app.use("/api/staff", authenticateToken, staffRoutes);
