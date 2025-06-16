@@ -21,6 +21,22 @@ const customerSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    city: {
+      type: String,
+      trim: true,
+    },
+    district: {
+      type: String,
+      trim: true,
+    },
+    ward: {
+      type: String,
+      trim: true,
+    },
+    addressType: {
+      type: String,
+      trim: true,
+    },
     accountId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Account",

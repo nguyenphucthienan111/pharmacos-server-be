@@ -20,6 +20,18 @@ const { authorize } = require("../middleware/auth");
  *         dateOfBirth:
  *           type: string
  *           format: date
+ *         phone:
+ *           type: string
+ *         address:
+ *           type: string
+ *         city:
+ *           type: string
+ *         district:
+ *           type: string
+ *         ward:
+ *           type: string
+ *         addressType:
+ *           type: string
  *     ProductRecommendation:
  *       type: object
  *       properties:
@@ -102,13 +114,35 @@ router.get("/profile", authorize(["customer"]), async (req, res) => {
 router.patch("/profile", authorize(["customer"]), async (req, res) => {
   try {
     const updateFields = {};
-    const { name, gender, dateOfBirth, phone, address } = req.body;
+    const {
+      name,
+      gender,
+      dateOfBirth,
+      phone,
+      address,
+      city,
+      district,
+      ward,
+      addressType,
+    } = req.body;
 
-    if (name !== undefined) updateFields.name = name;
-    if (gender !== undefined) updateFields.gender = gender;
-    if (dateOfBirth !== undefined) updateFields.dateOfBirth = dateOfBirth;
-    if (phone !== undefined) updateFields.phone = phone;
-    if (address !== undefined) updateFields.address = address;
+    // Cập nhật các trường có trong body
+    const fields = [
+      "name",
+      "gender",
+      "dateOfBirth",
+      "phone",
+      "address",
+      "city",
+      "district",
+      "ward",
+      "addressType",
+    ];
+    fields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateFields[field] = req.body[field];
+      }
+    });
 
     const customer = await Customer.findByIdAndUpdate(
       req.user.profileId,
@@ -223,13 +257,11 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
       return res.status(404).json({ message: "Account not found" });
     }
 
-    // Verify current password
     const isValid = await account.comparePassword(currentPassword);
     if (!isValid) {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
 
-    // Update password - let the pre-save hook handle hashing
     account.password = newPassword;
     await account.save();
 
