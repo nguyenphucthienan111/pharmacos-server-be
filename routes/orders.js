@@ -379,7 +379,15 @@ router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
   try {
     const { status } = req.body;
 
-    // Find order
+    // Validate status enum
+    if (!["pending", "processing", "completed", "cancelled"].includes(status)) {
+      return res.status(400).json({
+        message:
+          "Invalid status. Must be one of: pending, processing, completed, cancelled",
+      });
+    }
+
+    // Find order and update status directly without validation
     const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -405,11 +413,14 @@ router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
       });
     }
 
-    // Update order status
-    order.status = status;
-    await order.save();
+    // Update status directly in database to avoid validation of other fields
+    const updatedOrder = await Order.findByIdAndUpdate(
+      req.params.id,
+      { status: status },
+      { new: true }
+    );
 
-    res.json(order);
+    res.json(updatedOrder);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
