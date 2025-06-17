@@ -353,4 +353,72 @@ router.delete("/items/:id", authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/cart:
+ *   delete:
+ *     summary: Clear user's cart
+ *     description: Remove all items from the user's cart
+ *     tags: [Cart]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cart cleared successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Cart cleared successfully"
+ *                 removedItems:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       productId:
+ *                         type: string
+ *                       quantity:
+ *                         type: number
+ *                       unitPrice:
+ *                         type: number
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ */
+router.delete("/", authenticateToken, async (req, res) => {
+  try {
+    // Find user's cart
+    const cart = await Cart.findOne({ customerId: req.user._id });
+    if (!cart) {
+      return res.status(404).json({ message: "Cart not found" });
+    }
+
+    // Get all cart items before deletion for response
+    const cartItems = await CartItem.find({
+      _id: { $in: cart.items },
+    });
+
+    // Remove all cart items
+    await CartItem.deleteMany({
+      _id: { $in: cart.items },
+    });
+
+    // Reset cart
+    cart.items = [];
+    cart.totalAmount = 0;
+    await cart.save();
+
+    res.json({
+      message: "Cart cleared successfully",
+      removedItems: cartItems,
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 module.exports = router;
