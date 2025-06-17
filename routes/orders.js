@@ -132,7 +132,7 @@ router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
  * @swagger
  * /api/orders/{id}:
  *   get:
- *     summary: Get order details by orderID (Staff)
+ *     summary: Get order details by orderID (all roles)
  *     tags: [Orders]
  *     security:
  *       - bearerAuth: []
@@ -158,28 +158,24 @@ router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
  *                     $ref: '#/components/schemas/OrderItem'
  *       401:
  *         description: Not authenticated
- *       403:
- *         description: Not authorized
  *       404:
  *         description: Order not found
  */
-router.get("/:id", authorize(["customer", "staff"]), async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id).populate(
-      "customerId",
-      "name email"
-    );
+router.get(
+  "/:id",
+  authorize(["customer", "staff", "admin"]),
+  async (req, res) => {
+    try {
+      const order = await Order.findById(req.params.id).populate(
+        "customerId",
+        "name email"
+      );
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    // Check permissions for customer first
-    if (req.user.role === "customer") {
-      if (order.customerId?.toString() !== req.user.profileId) {
-        return res.status(403).json({ message: "Unauthorized access" });
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
       }
-      // Get all products for customer
+
+      // Get all order details
       const orderDetails = await OrderDetail.find({
         orderId: order._id,
       }).populate({
@@ -187,40 +183,32 @@ router.get("/:id", authorize(["customer", "staff"]), async (req, res) => {
         select: "name price createdBy",
       });
 
+      let filteredDetails = orderDetails;
+
+      // For customer, check if it's their order
+      if (req.user.role === "customer") {
+        if (order.customerId?.toString() !== req.user.profileId) {
+          return res.status(404).json({ message: "Order not found" });
+        }
+      }
+
+      // For staff, only show their products
+      else if (req.user.role === "staff") {
+        filteredDetails = orderDetails.filter(
+          (detail) => detail.productId?.createdBy?.toString() === req.user.id
+        );
+      }
+      // Admin can see all details
+
       return res.json({
         order,
-        items: orderDetails,
+        items: filteredDetails,
       });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
-
-    // For staff, only get their products
-    const orderDetails = await OrderDetail.find({
-      orderId: order._id,
-    }).populate({
-      path: "productId",
-      select: "name price createdBy",
-      match: { createdBy: req.user.id },
-    });
-
-    // Remove entries where productId is null (products not created by staff)
-    const staffProducts = orderDetails.filter(
-      (detail) => detail.productId !== null
-    );
-
-    if (staffProducts.length === 0) {
-      return res.status(403).json({
-        message: "No products found in this order that were created by you",
-      });
-    }
-
-    return res.json({
-      order,
-      items: staffProducts,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
-});
+);
 
 /**
  * @swagger
@@ -365,9 +353,14 @@ router.post("/", authorize(["customer"]), async (req, res) => {
  *               status:
  *                 type: string
  *                 enum: [pending, processing, completed, cancelled]
+ *               cancelReason:
+ *                 type: string
+ *                 description: Required when status is cancelled
  *     responses:
  *       200:
  *         description: Order status updated successfully
+ *       400:
+ *         description: Invalid status or missing cancel reason
  *       401:
  *         description: Not authenticated
  *       403:
@@ -377,7 +370,7 @@ router.post("/", authorize(["customer"]), async (req, res) => {
  */
 router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, cancelReason } = req.body;
 
     // Validate status enum
     if (!["pending", "processing", "completed", "cancelled"].includes(status)) {
@@ -387,7 +380,7 @@ router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
       });
     }
 
-    // Find order and update status directly without validation
+    // Find order and validate
     const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -413,11 +406,27 @@ router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
       });
     }
 
-    // Update status directly in database to avoid validation of other fields
+    // Handle status change and cancelReason
+    const updateData = { status };
+
+    if (status === "cancelled") {
+      // Require cancelReason when changing to cancelled
+      if (!cancelReason) {
+        return res.status(400).json({
+          message: "Cancel reason is required when cancelling an order",
+        });
+      }
+      updateData.cancelReason = cancelReason;
+    } else {
+      // Remove cancelReason when changing to other statuses
+      updateData.cancelReason = undefined;
+    }
+
+    // Update in database with validation
     const updatedOrder = await Order.findByIdAndUpdate(
       req.params.id,
-      { status: status },
-      { new: true }
+      updateData,
+      { new: true, runValidators: true }
     );
 
     res.json(updatedOrder);

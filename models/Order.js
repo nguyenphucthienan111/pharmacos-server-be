@@ -53,6 +53,13 @@ const orderSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    cancelReason: {
+      type: String,
+      required: function () {
+        return this.status === "cancelled";
+      },
+      trim: true,
+    },
   },
   {
     timestamps: true,
