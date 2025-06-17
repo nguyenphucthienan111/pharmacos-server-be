@@ -359,7 +359,14 @@ router.post("/staff", async (req, res) => {
   try {
     const { username, password, email, name } = req.body;
 
-    console.log("Creating staff account with username:", username);
+    // Check if a staff account already exists
+    const existingStaffCount = await Account.countDocuments({ role: "staff" });
+    if (existingStaffCount > 0) {
+      return res.status(400).json({
+        message:
+          "A staff account already exists. Only one staff account is allowed.",
+      });
+    }
 
     // Use escapeRegExp to handle special characters in username
     const escapeRegExp = (string) => {
@@ -367,13 +374,9 @@ router.post("/staff", async (req, res) => {
     };
 
     // Check if username exists (case-insensitive)
-    const allAccounts = await Account.find();
-    console.log("All existing accounts:", JSON.stringify(allAccounts, null, 2));
-
     const existingAccount = await Account.findOne({
       username: { $regex: new RegExp(`^${escapeRegExp(username)}$`, "i") },
     });
-    console.log("Found existing account:", existingAccount);
 
     if (existingAccount) {
       return res.status(400).json({ message: "Username already exists" });
