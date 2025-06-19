@@ -48,7 +48,7 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *           type: array
  *           items:
  *             type: string
- *             enum: [K]
+ *             enum: [oily, dry, combination, sensitive, normal, all]
  *           description: Suitable skin types
  *         size:
  *           type: string
