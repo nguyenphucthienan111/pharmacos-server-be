@@ -394,20 +394,20 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    const similarities = await ProductSimilarity.find({
-      productId: product._id,
+    // Tìm các sản phẩm có cùng subcategory
+    const similarProducts = await Product.find({
+      subcategory: product.subcategory,
+      _id: { $ne: product._id }, // Loại trừ sản phẩm hiện tại
     })
-      .sort({ similarityScore: -1 })
       .limit(5)
-      .populate("similarProductId", "-__v"); // Populate and exclude version field
+      .select("-__v");
 
     res.json({
       success: true,
       data: {
         product,
-        similarProducts: similarities.map((s) => ({
-          product: s.similarProductId,
-          similarityScore: s.similarityScore,
+        similarProducts: similarProducts.map((p) => ({
+          product: p,
         })),
       },
     });
