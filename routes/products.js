@@ -42,13 +42,13 @@ const { authorize, authenticateToken } = require("../middleware/auth");
  *         benefits:
  *           type: array
  *           items:
- *             type: string
+ *             type:  string
  *           description: List of product benefits
  *         skinType:
  *           type: array
  *           items:
  *             type: string
- *             enum: [oily, dry, combination, sensitive, normal, all]
+ *             enum: [K]
  *           description: Suitable skin types
  *         size:
  *           type: string
