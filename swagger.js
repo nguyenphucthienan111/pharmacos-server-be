@@ -9,6 +9,15 @@ const options = {
       version: "1.0.0",
       description: "API documentation for Pharmacos Server",
     },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
     servers: [
       {
         url: "https://pharmacos-server-be.onrender.com",
@@ -20,7 +29,7 @@ const options = {
       },
     ],
   },
-  apis: ["./routes/*.js"], // Đường dẫn tới các file route để swagger-jsdoc quét comment
+  apis: ["./routes/*.js"],
 };
 
 const swaggerSpec = swaggerJSDoc(options);

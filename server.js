@@ -70,7 +70,6 @@ connectToDatabase().catch((error) => {
   console.error("MongoDB connection error:", error);
   process.exit(1);
 });
-
 // Import routes
 const authRoutes = require("./routes/auth");
 const customerRoutes = require("./routes/customers");
@@ -80,6 +79,7 @@ const cartRoutes = require("./routes/cart");
 const aiRoutes = require("./routes/ai");
 const adminRoutes = require("./routes/admin");
 const staffRoutes = require("./routes/staff");
+const favoriteRoutes = require("./routes/favorites");
 
 // Use routes
 app.use("/api/auth", authRoutes);
@@ -90,6 +90,7 @@ app.use("/api/cart", cartRoutes); // Cart management
 app.use("/api/ai", aiRoutes); // AI features
 app.use("/api/admin", authenticateToken, adminRoutes);
 app.use("/api/staff", authenticateToken, staffRoutes);
+app.use("/api/favorites", authenticateToken, favoriteRoutes); // Favorites management
 
 // Error handling middleware
 app.use((err, req, res, next) => {
