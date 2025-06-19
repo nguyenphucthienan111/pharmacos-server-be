@@ -203,26 +203,6 @@ router.patch("/products/:id/stock", async (req, res) => {
 
 /**
  * @swagger
- * /api/staff/orders:
- *   get:
- *     summary: Get all orders
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- */
-router.get("/orders", async (req, res) => {
-  try {
-    const orders = await Order.find()
-      .populate("customerId", "name email")
-      .sort({ orderDate: -1 });
-    res.json(orders);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
  * /api/staff/orders/{id}/status:
  *   patch:
  *     summary: Update order status
