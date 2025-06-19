@@ -203,34 +203,6 @@ router.patch("/products/:id/stock", async (req, res) => {
 
 /**
  * @swagger
- * /api/staff/orders/{id}/status:
- *   patch:
- *     summary: Update order status
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- */
-router.patch("/orders/:id/status", async (req, res) => {
-  try {
-    const { status } = req.body;
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
-
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
-
-    res.json(order);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
  * /api/staff/analytics/sales:
  *   get:
  *     summary: Get sales analytics
