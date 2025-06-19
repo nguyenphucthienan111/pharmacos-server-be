@@ -159,50 +159,6 @@ router.get("/products", async (req, res) => {
 
 /**
  * @swagger
- * /api/staff/products/{id}:
- *   patch:
- *     summary: Update product stock
- *     tags: [Staff]
- *     security:
- *       - bearerAuth: []
- */
-router.patch("/products/:id/stock", async (req, res) => {
-  try {
-    const { stockQuantity } = req.body;
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { stockQuantity },
-      { new: true }
-    );
-
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-
-    // Update sales history if stock decreased
-    const currentDate = new Date();
-    const month = currentDate.getMonth() + 1;
-    const year = currentDate.getFullYear();
-
-    await Product.findByIdAndUpdate(req.params.id, {
-      $push: {
-        salesHistory: {
-          month,
-          year,
-          quantity: stockQuantity,
-          revenue: stockQuantity * product.price,
-        },
-      },
-    });
-
-    res.json(product);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
-
-/**
- * @swagger
  * /api/staff/analytics/sales:
  *   get:
  *     summary: Get sales analytics
