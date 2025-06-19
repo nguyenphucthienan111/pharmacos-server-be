@@ -161,6 +161,11 @@ const productSchema = new mongoose.Schema(
       of: String,
       default: {},
     },
+    image: {
+      type: String,
+      required: false,
+      trim: true,
+    },
   },
   {
     timestamps: true,

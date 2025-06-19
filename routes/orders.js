@@ -87,7 +87,7 @@ router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
           orderId: order._id,
         }).populate({
           path: "productId",
-          select: "name price createdBy",
+          select: "name price createdBy images", // đổi image thành images
         });
 
         // For debugging
@@ -180,14 +180,17 @@ router.get(
         orderId: order._id,
       }).populate({
         path: "productId",
-        select: "name price createdBy",
+        select: "name price createdBy images",
       });
 
       let filteredDetails = orderDetails;
 
       // For customer, check if it's their order
       if (req.user.role === "customer") {
-        if (order.customerId?.toString() !== req.user.profileId) {
+        // Hỗ trợ cả trường hợp customerId là object hoặc string
+        const orderCustomerId =
+          order.customerId?._id?.toString() || order.customerId?.toString();
+        if (orderCustomerId !== req.user.profileId) {
           return res.status(404).json({ message: "Order not found" });
         }
       }
