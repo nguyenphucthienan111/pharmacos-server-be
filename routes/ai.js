@@ -3,8 +3,6 @@ const router = express.Router();
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const { authenticateToken } = require("../middleware/auth");
-const AISearch = require("../models/AIModels");
 const Product = require("../models/Product");
 const { searchProductByImage } = require("../utils/geminiClient");
 
@@ -117,9 +115,8 @@ function matchProduct(productInfo, dbProduct) {
  * /api/ai/search-by-image:
  *   post:
  *     summary: Tìm kiếm sản phẩm bằng hình ảnh sử dụng Google Gemini AI
+ *     description: Upload hình ảnh sản phẩm để tìm kiếm sản phẩm tương tự trong shop
  *     tags: [AI Features]
- *     security:
- *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -154,110 +151,57 @@ function matchProduct(productInfo, dbProduct) {
  *                 message:
  *                   type: string
  *                   description: Thông báo kết quả tìm kiếm
+ *       400:
+ *         description: Lỗi dữ liệu đầu vào
+ *       500:
+ *         description: Lỗi server
  */
-router.post(
-  "/search-by-image",
-  authenticateToken,
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Vui lòng upload file hình ảnh đúng định dạng (jpg, jpeg, png) và dung lượng không quá 5MB",
-        });
-      }
-
-      // Đọc file hình ảnh
-      const imageBuffer = fs.readFileSync(req.file.path);
-
-      // Gọi Gemini API để phân tích hình ảnh
-      const geminiResult = await searchProductByImage(
-        imageBuffer,
-        req.file.mimetype
-      );
-
-      // Trích xuất thông tin sản phẩm từ kết quả Gemini
-      const productInfo = extractProductInfo(geminiResult);
-      console.log("Product info from Gemini:", productInfo);
-
-      // Tìm kiếm sản phẩm trong database
-      const products = await Product.find();
-
-      // Lọc sản phẩm phù hợp
-      const matchedProducts = products.filter((product) =>
-        matchProduct(productInfo, product)
-      );
-
-      // Lưu kết quả tìm kiếm
-      const aiSearch = new AISearch({
-        userId: req.user._id,
-        imageUrl: req.file.path,
-        geminiResult: geminiResult,
-        matchedProducts: matchedProducts.map((p) => p._id),
-      });
-      await aiSearch.save();
-
-      // Trả về kết quả
-      res.json({
-        success: matchedProducts.length > 0,
-        geminiAnalysis: geminiResult,
-        matchedProducts: matchedProducts,
-        message:
-          matchedProducts.length > 0
-            ? "Đã tìm thấy sản phẩm phù hợp"
-            : "No matching products found",
-      });
-    } catch (error) {
-      console.error("Lỗi khi tìm kiếm:", error);
-      res.status(500).json({
+router.post("/search-by-image", upload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
         success: false,
-        message: "Đã xảy ra lỗi khi tìm kiếm sản phẩm",
-        error: error.message,
+        message:
+          "Vui lòng upload file hình ảnh đúng định dạng (jpg, jpeg, png) và dung lượng không quá 5MB",
       });
     }
-  }
-);
 
-/**
- * @swagger
- * /api/ai/search-history:
- *   get:
- *     summary: Lấy lịch sử tìm kiếm bằng AI
- *     tags: [AI Features]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Lấy lịch sử thành công
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 history:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/AISearch'
- */
-router.get("/search-history", authenticateToken, async (req, res) => {
-  try {
-    const searchHistory = await AISearch.find({ userId: req.user._id })
-      .populate("matchedProducts")
-      .sort({ searchedAt: -1 });
+    // Đọc file hình ảnh
+    const imageBuffer = fs.readFileSync(req.file.path);
 
+    // Gọi Gemini API để phân tích hình ảnh
+    const geminiResult = await searchProductByImage(
+      imageBuffer,
+      req.file.mimetype
+    );
+
+    // Trích xuất thông tin sản phẩm từ kết quả Gemini
+    const productInfo = extractProductInfo(geminiResult);
+    console.log("Product info from Gemini:", productInfo);
+
+    // Tìm kiếm sản phẩm trong database
+    const products = await Product.find();
+
+    // Lọc sản phẩm phù hợp
+    const matchedProducts = products.filter((product) =>
+      matchProduct(productInfo, product)
+    );
+
+    // Trả về kết quả
     res.json({
-      success: true,
-      history: searchHistory,
+      success: matchedProducts.length > 0,
+      geminiAnalysis: geminiResult,
+      matchedProducts: matchedProducts,
+      message:
+        matchedProducts.length > 0
+          ? "Đã tìm thấy sản phẩm phù hợp"
+          : "No matching products found",
     });
   } catch (error) {
+    console.error("Lỗi khi tìm kiếm:", error);
     res.status(500).json({
       success: false,
-      message: "Đã xảy ra lỗi khi lấy lịch sử tìm kiếm",
+      message: "Đã xảy ra lỗi khi tìm kiếm sản phẩm",
       error: error.message,
     });
   }
