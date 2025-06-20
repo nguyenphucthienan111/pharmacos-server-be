@@ -17,7 +17,72 @@ const options = {
           bearerFormat: "JWT",
         },
       },
+      schemas: {
+        Product: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "ID của sản phẩm",
+            },
+            name: {
+              type: "string",
+              description: "Tên sản phẩm",
+            },
+            description: {
+              type: "string",
+              description: "Mô tả sản phẩm",
+            },
+            brand: {
+              type: "array",
+              items: {
+                type: "string",
+              },
+              description: "Thương hiệu sản phẩm",
+            },
+            category: {
+              type: "string",
+              description: "Danh mục sản phẩm",
+            },
+          },
+        },
+        AISearch: {
+          type: "object",
+          properties: {
+            userId: {
+              type: "string",
+              description: "ID của người dùng thực hiện tìm kiếm",
+            },
+            imageUrl: {
+              type: "string",
+              description: "Đường dẫn lưu hình ảnh đã upload",
+            },
+            geminiResult: {
+              type: "string",
+              description: "Kết quả phân tích từ Gemini AI",
+            },
+            matchedProducts: {
+              type: "array",
+              items: {
+                type: "string",
+              },
+              description: "Danh sách ID các sản phẩm phù hợp",
+            },
+            searchedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Thời gian tìm kiếm",
+            },
+          },
+        },
+      },
     },
+    tags: [
+      {
+        name: "AI Features",
+        description: "Các chức năng AI sử dụng Google Gemini",
+      },
+    ],
     servers: [
       {
         url: "https://pharmacos-server-be.onrender.com",

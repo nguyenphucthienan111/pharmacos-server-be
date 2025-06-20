@@ -42,6 +42,76 @@ const upload = multer({
   fileFilter: fileFilter,
 });
 
+// Helper function để trích xuất thông tin sản phẩm từ kết quả Gemini
+function extractProductInfo(geminiText) {
+  let productInfo = {
+    brand: "",
+    name: "",
+    type: "",
+  };
+
+  // Chuyển text về lowercase để dễ so sánh
+  const text = geminiText.toLowerCase();
+
+  // Tìm brand name trong dấu **
+  const brandMatch = text.match(/\*\*(.*?)\*\*/);
+  if (brandMatch) {
+    const fullName = brandMatch[1].toLowerCase();
+
+    // Tìm thương hiệu
+    const brands = ["image", "the ordinary", "vital", "chanel", "gucci"];
+    const foundBrand = brands.find((brand) => fullName.includes(brand));
+    if (foundBrand) {
+      productInfo.brand = foundBrand;
+    }
+
+    // Lưu tên sản phẩm đầy đủ
+    productInfo.name = fullName;
+  }
+
+  // Xác định loại sản phẩm
+  if (text.includes("serum")) productInfo.type = "serum";
+  else if (text.includes("cream")) productInfo.type = "cream";
+  else if (text.includes("moisturizer")) productInfo.type = "moisturizer";
+
+  return productInfo;
+}
+
+// Helper function để so khớp sản phẩm
+function matchProduct(productInfo, dbProduct) {
+  // Nếu không có thông tin sản phẩm, không match
+  if (!productInfo.name) return false;
+
+  const productName = dbProduct.name.toLowerCase();
+  const productDesc = dbProduct.description.toLowerCase();
+  const productImages = dbProduct.images.map((img) => img.url.toLowerCase());
+
+  // Kiểm tra tên sản phẩm và mô tả
+  const nameMatch = productInfo.name
+    .split(" ")
+    .some(
+      (word) =>
+        word.length > 3 &&
+        (productName.includes(word) || productDesc.includes(word))
+    );
+
+  // Kiểm tra URL hình ảnh
+  const imageMatch = productImages.some((url) => {
+    const urlParts = url.split(/[-_.]/).map((part) => part.toLowerCase());
+    return urlParts.some((part) => productInfo.name.includes(part));
+  });
+
+  // Trả về true nếu match cả tên và hình ảnh
+  return nameMatch && imageMatch;
+}
+
+/**
+ * @swagger
+ * tags:
+ *   name: AI Features
+ *   description: Các chức năng AI sử dụng Google Gemini
+ */
+
 /**
  * @swagger
  * /api/ai/search-by-image:
@@ -71,7 +141,8 @@ const upload = multer({
  *               properties:
  *                 success:
  *                   type: boolean
- *                   example: true
+ *                   example: false
+ *                   description: true nếu tìm thấy sản phẩm, false nếu không tìm thấy
  *                 geminiAnalysis:
  *                   type: string
  *                   description: Kết quả phân tích hình ảnh từ Gemini
@@ -79,14 +150,10 @@ const upload = multer({
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Product'
+ *                   description: Danh sách sản phẩm phù hợp
  *                 message:
  *                   type: string
- *       400:
- *         description: Lỗi dữ liệu đầu vào
- *       401:
- *         description: Chưa đăng nhập
- *       500:
- *         description: Lỗi server
+ *                   description: Thông báo kết quả tìm kiếm
  */
 router.post(
   "/search-by-image",
@@ -111,28 +178,17 @@ router.post(
         req.file.mimetype
       );
 
-      // Xử lý kết quả từ Gemini để tạo từ khóa tìm kiếm
-      const searchKeywords = geminiResult
-        .toLowerCase()
-        .split(/[\s,\.]+/) // Tách theo khoảng trắng, dấu phẩy hoặc dấu chấm
-        .filter((word) => word.length > 2) // Chỉ lấy các từ có độ dài > 2
-        .map((word) =>
-          word.replace(
-            /[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/g,
-            ""
-          )
-        ); // Loại bỏ ký tự đặc biệt
+      // Trích xuất thông tin sản phẩm từ kết quả Gemini
+      const productInfo = extractProductInfo(geminiResult);
+      console.log("Product info from Gemini:", productInfo);
 
-      // Tìm kiếm sản phẩm trong database dựa trên từ khóa
-      const searchRegexes = searchKeywords.map(
-        (keyword) => new RegExp(keyword, "i")
+      // Tìm kiếm sản phẩm trong database
+      const products = await Product.find();
+
+      // Lọc sản phẩm phù hợp
+      const matchedProducts = products.filter((product) =>
+        matchProduct(productInfo, product)
       );
-      const matchedProducts = await Product.find({
-        $or: [
-          { name: { $in: searchRegexes } },
-          { description: { $in: searchRegexes } },
-        ],
-      });
 
       // Lưu kết quả tìm kiếm
       const aiSearch = new AISearch({
@@ -145,13 +201,13 @@ router.post(
 
       // Trả về kết quả
       res.json({
-        success: true,
+        success: matchedProducts.length > 0,
         geminiAnalysis: geminiResult,
         matchedProducts: matchedProducts,
         message:
           matchedProducts.length > 0
             ? "Đã tìm thấy sản phẩm phù hợp"
-            : "Không tìm thấy sản phẩm phù hợp trong cửa hàng",
+            : "No matching products found",
       });
     } catch (error) {
       console.error("Lỗi khi tìm kiếm:", error);
@@ -187,10 +243,6 @@ router.post(
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/AISearch'
- *       401:
- *         description: Chưa đăng nhập
- *       500:
- *         description: Lỗi server
  */
 router.get("/search-history", authenticateToken, async (req, res) => {
   try {
@@ -210,32 +262,5 @@ router.get("/search-history", authenticateToken, async (req, res) => {
     });
   }
 });
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     AISearch:
- *       type: object
- *       properties:
- *         userId:
- *           type: string
- *           description: ID của người dùng thực hiện tìm kiếm
- *         imageUrl:
- *           type: string
- *           description: Đường dẫn lưu hình ảnh đã upload
- *         geminiResult:
- *           type: string
- *           description: Kết quả phân tích từ Gemini AI
- *         matchedProducts:
- *           type: array
- *           items:
- *             type: string
- *           description: Danh sách ID các sản phẩm phù hợp
- *         searchedAt:
- *           type: string
- *           format: date-time
- *           description: Thời gian tìm kiếm
- */
 
 module.exports = router;
