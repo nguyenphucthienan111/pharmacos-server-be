@@ -21,9 +21,11 @@ router.get("/", authenticateToken, async (req, res) => {
   try {
     let cart = await Cart.findOne({ customerId: req.user._id }).populate({
       path: "items",
+      model: "CartItem",
       populate: {
         path: "productId",
-        select: "name price image",
+        model: "Product",
+        select: "name price image images",
       },
     });
 
