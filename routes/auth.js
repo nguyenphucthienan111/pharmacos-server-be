@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
+const passport = require("passport");
 const Account = require("../models/Account");
 const Customer = require("../models/Customer");
 const SaleStaff = require("../models/SaleStaff");
@@ -542,5 +543,64 @@ router.post("/reset-password", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+/**
+ * @swagger
+ * /api/auth/google:
+ *   get:
+ *     summary: Initiate Google OAuth2.0 authentication
+ *     tags: [Authentication]
+ *     responses:
+ *       302:
+ *         description: Redirects to Google login page
+ */
+router.get(
+  "/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    session: false,
+  })
+);
+
+/**
+ * @swagger
+ * /api/auth/google/callback:
+ *   get:
+ *     summary: Handle Google OAuth2.0 callback
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: Login successful, returns JWT token
+ *       401:
+ *         description: Authentication failed
+ */
+router.get(
+  "/google/callback",
+  passport.authenticate("google", {
+    session: false,
+    failureRedirect: "/login",
+  }),
+  async (req, res) => {
+    try {
+      const token = jwt.sign(
+        {
+          _id: req.user._id,
+          id: req.user._id,
+          role: req.user.role,
+          profileId: req.user._id,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN }
+      );
+
+      // Redirect to frontend with token
+      res.redirect(
+        `${process.env.FRONTEND_URL}/auth/google-callback?token=${token}`
+      );
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
 
 module.exports = router;
