@@ -1052,6 +1052,7 @@ router.patch(
         "brand",
         "features",
         "imageUrl",
+        "images",
         "price",
         "stockQuantity",
         "manufacturingDate",
@@ -1133,6 +1134,13 @@ router.patch(
         });
       }
 
+      // Xử lý đặc biệt cho mảng images
+      if (updateFields.images) {
+        product.images = updateFields.images;
+        delete updateFields.images;
+      }
+      
+      // Cập nhật các trường còn lại
       Object.assign(product, updateFields);
       await product.save();
       if (!product) {
