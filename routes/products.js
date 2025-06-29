@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
-const { ImageSearch, ProductSimilarity } = require("../models/AIModels");
+const ImageSearch = require("../models/AIModels");
 const { authorize, authenticateToken } = require("../middleware/auth");
 
 /**
@@ -1182,10 +1182,7 @@ router.delete(
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      await ProductSimilarity.deleteMany({
-        $or: [{ productId: product._id }, { similarProductId: product._id }],
-      });
-      await product.deleteOne(); // Actually delete the product document
+      await product.deleteOne();
       res.json({ message: "Product deleted successfully" });
     } catch (error) {
       res.status(500).json({ message: error.message });
