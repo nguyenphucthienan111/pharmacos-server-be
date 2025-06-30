@@ -137,13 +137,13 @@ router.patch("/profile", authorize(["customer"]), async (req, res) => {
       name,
       gender,
       dateOfBirth,
-      phone,
       address,
       city,
       district,
       ward,
       addressType,
       isDefault,
+      phone,
     } = req.body;
 
     const fields = [
@@ -168,17 +168,76 @@ router.patch("/profile", authorize(["customer"]), async (req, res) => {
       updateFields.isDefault = !!req.body.isDefault;
     }
 
-    const customer = await Customer.findByIdAndUpdate(
-      req.user.profileId,
-      updateFields,
-      { new: true }
-    ).select("-accountId");
+    // Update both root fields and default address if present
+    const customer = await Customer.findById(req.user.profileId);
 
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
 
-    res.json(customer);
+    // Update root fields
+    if (updateFields.name !== undefined) customer.name = updateFields.name;
+    if (updateFields.gender !== undefined)
+      customer.gender = updateFields.gender;
+    if (updateFields.dateOfBirth !== undefined)
+      customer.dateOfBirth = updateFields.dateOfBirth;
+    if (updateFields.phone !== undefined) customer.phone = updateFields.phone;
+
+    // Update default address if present and address fields provided
+    if (
+      customer.addresses &&
+      customer.addresses.length > 0 &&
+      (updateFields.address !== undefined ||
+        updateFields.city !== undefined ||
+        updateFields.district !== undefined ||
+        updateFields.ward !== undefined ||
+        updateFields.addressType !== undefined ||
+        updateFields.isDefault !== undefined ||
+        updateFields.phone !== undefined ||
+        updateFields.name !== undefined)
+    ) {
+      // Find default address
+      const defaultAddr =
+        customer.addresses.find((addr) => addr.isDefault) ||
+        customer.addresses[0];
+      if (updateFields.address !== undefined)
+        defaultAddr.address = updateFields.address;
+      if (updateFields.city !== undefined) defaultAddr.city = updateFields.city;
+      if (updateFields.district !== undefined)
+        defaultAddr.district = updateFields.district;
+      if (updateFields.ward !== undefined) defaultAddr.ward = updateFields.ward;
+      if (updateFields.addressType !== undefined)
+        defaultAddr.addressType = updateFields.addressType;
+      if (updateFields.isDefault !== undefined)
+        defaultAddr.isDefault = updateFields.isDefault;
+      if (updateFields.phone !== undefined)
+        defaultAddr.phone = updateFields.phone;
+      if (updateFields.name !== undefined) defaultAddr.name = updateFields.name;
+    }
+
+    await customer.save();
+
+    // Return updated profile (same as GET /profile)
+    let defaultAddress = null;
+    if (customer.addresses && customer.addresses.length > 0) {
+      defaultAddress =
+        customer.addresses.find((addr) => addr.isDefault) ||
+        customer.addresses[0];
+    }
+
+    res.json({
+      ...customer.toObject(),
+      address: defaultAddress ? defaultAddress.address : "",
+      city: defaultAddress ? defaultAddress.city : "",
+      district: defaultAddress ? defaultAddress.district : "",
+      ward: defaultAddress ? defaultAddress.ward : "",
+      addressType: defaultAddress ? defaultAddress.addressType : "",
+      isDefault: defaultAddress ? defaultAddress.isDefault : false,
+      phone: defaultAddress ? defaultAddress.phone : customer.phone,
+      name: defaultAddress ? defaultAddress.name : customer.name,
+      addresses: customer.addresses,
+      defaultAddress: defaultAddress,
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
