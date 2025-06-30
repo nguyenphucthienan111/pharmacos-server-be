@@ -80,6 +80,7 @@ const aiRoutes = require("./routes/ai");
 const adminRoutes = require("./routes/admin");
 const staffRoutes = require("./routes/staff");
 const favoriteRoutes = require("./routes/favorites");
+const blogsRoutes = require("./routes/blogs");
 
 // Use routes
 app.use("/api/auth", authRoutes);
@@ -91,6 +92,7 @@ app.use("/api/ai", aiRoutes); // AI features
 app.use("/api/admin", authenticateToken, adminRoutes);
 app.use("/api/staff", authenticateToken, staffRoutes);
 app.use("/api/favorites", authenticateToken, favoriteRoutes); // Favorites management
+app.use("/api/blogs", blogsRoutes); // Blog management
 
 // Error handling middleware
 app.use((err, req, res, next) => {
