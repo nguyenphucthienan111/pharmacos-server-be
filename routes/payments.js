@@ -2,6 +2,10 @@ const express = require("express");
 const router = express.Router();
 const Payment = require("../models/Payment");
 const Order = require("../models/Order");
+const Cart = require("../models/Cart");
+const CartItem = require("../models/CartItem");
+const Product = require("../models/Product");
+const OrderDetail = require("../models/OrderDetail");
 const { authenticateToken } = require("../middleware/auth");
 
 // Import PayOS
@@ -137,13 +141,17 @@ router.post("/create", authenticateToken, async (req, res) => {
       });
     }
 
-    // Calculate total amount from items
-    const totalAmount = validItems.reduce(
+    // Calculate subtotal from items
+    const subtotal = validItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
 
-    if (totalAmount <= 0) {
+    // Add shipping fee
+    const shippingFee = 1000; // Default shipping fee
+    const totalAmount = subtotal + shippingFee;
+
+    if (subtotal <= 0) {
       return res.status(400).json({
         success: false,
         message: "Order total amount must be greater than 0",
@@ -157,7 +165,11 @@ router.post("/create", authenticateToken, async (req, res) => {
     const paymentData = {
       orderCode: orderCode,
       amount: totalAmount,
-      description: `Payment for order ${orderId}`.slice(0, 25),
+      description:
+        `Payment for order ${orderId} (incl. ${shippingFee}₫ shipping)`.slice(
+          0,
+          25
+        ),
       items: validItems,
       returnUrl:
         process.env.PAYOS_RETURN_URL ||
@@ -178,6 +190,8 @@ router.post("/create", authenticateToken, async (req, res) => {
       orderId: order._id,
       userId: req.user.id,
       amount: totalAmount,
+      subtotal: subtotal,
+      shippingFee: shippingFee,
       payosOrderId: orderCode.toString(),
       status: "pending",
       paymentUrl: paymentLinkResponse.checkoutUrl,
@@ -315,14 +329,46 @@ router.post("/webhook", async (req, res) => {
         payment.paidAt = new Date();
         await payment.save();
 
-        // Update order payment status
-        await Order.findByIdAndUpdate(payment.orderId, {
-          paymentStatus: "success",
+        // Get order details and update product stock
+        const orderDetails = await OrderDetail.find({
+          orderId: payment.orderId,
         });
+        for (const detail of orderDetails) {
+          // Decrease product stock quantity
+          await Product.findByIdAndUpdate(detail.productId, {
+            $inc: { stockQuantity: -detail.quantity },
+          });
+          console.log(
+            `Updated stock for product ${detail.productId}, -${detail.quantity} units`
+          );
+        }
 
-        console.log(`Payment ${payment._id} marked as completed`);
+        // Update order status
+        const order = await Order.findByIdAndUpdate(
+          payment.orderId,
+          { paymentStatus: "success" },
+          { new: true }
+        );
+
+        // Clear cart items after successful payment
+        if (order && order.customerId) {
+          const cart = await Cart.findOne({ customerId: order.customerId });
+          if (cart) {
+            // Delete all cart items
+            await CartItem.deleteMany({ cartId: cart._id });
+            // Clear cart items array
+            cart.items = [];
+            cart.totalAmount = 0;
+            await cart.save();
+            console.log(`Cart cleared for customer ${order.customerId}`);
+          }
+        }
+
+        console.log(
+          `Payment ${payment._id} marked as completed and cart cleared`
+        );
       }
-    } else if (webhookData.code !== "00") {
+    } else if (webhookData.code !== "00" && webhookData.data) {
       // Payment failed or cancelled
       const paymentData = webhookData.data;
 
@@ -342,6 +388,12 @@ router.post("/webhook", async (req, res) => {
 
         console.log(`Payment ${payment._id} marked as failed`);
       }
+    } else {
+      console.error("Invalid webhook data: missing data field");
+      return res.status(400).json({
+        success: false,
+        message: "Invalid webhook data: missing data field",
+      });
     }
 
     res.json({ success: true });

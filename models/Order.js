@@ -66,6 +66,19 @@ const orderSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    subtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+      description: "Tổng tiền hàng trước phí ship",
+    },
+    shippingFee: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 1000,
+      description: "Phí vận chuyển",
+    },
     cancelReason: {
       type: String,
       required: function () {
@@ -94,10 +107,15 @@ orderSchema.pre("save", async function (next) {
     try {
       const OrderDetail = mongoose.model("OrderDetail");
       const details = await OrderDetail.find({ orderId: this._id });
-      this.totalAmount = details.reduce(
+      this.subtotal = details.reduce(
         (sum, item) => sum + item.quantity * item.unitPrice,
         0
       );
+      // Ensure shippingFee has default value
+      if (!this.shippingFee) {
+        this.shippingFee = 1000;
+      }
+      this.totalAmount = this.subtotal + this.shippingFee;
     } catch (error) {
       next(error);
     }

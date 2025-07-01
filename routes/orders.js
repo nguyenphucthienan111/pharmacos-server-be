@@ -287,11 +287,15 @@ router.post("/", authorize(["customer"]), async (req, res) => {
       }
     }
 
-    // Calculate total amount
-    let totalAmount = items.reduce(
+    // Calculate subtotal from items
+    const subtotal = items.reduce(
       (sum, item) => sum + item.quantity * item.unitPrice,
       0
     );
+
+    // Add shipping fee
+    const shippingFee = 1000; // Default shipping fee
+    const totalAmount = subtotal + shippingFee;
 
     const order = new Order({
       customerId: req.user.profileId,
@@ -300,6 +304,8 @@ router.post("/", authorize(["customer"]), async (req, res) => {
       shippingAddress: req.body.shippingAddress,
       status: "pending",
       totalAmount: totalAmount,
+      subtotal: subtotal,
+      shippingFee: shippingFee,
       note: req.body.note,
     });
     await order.save();

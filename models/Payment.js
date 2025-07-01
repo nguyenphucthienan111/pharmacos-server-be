@@ -17,6 +17,19 @@ const paymentSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    subtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+      description: "Tổng tiền hàng trước phí ship",
+    },
+    shippingFee: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 1000,
+      description: "Phí vận chuyển",
+    },
     payosOrderId: {
       type: String,
       required: true,
