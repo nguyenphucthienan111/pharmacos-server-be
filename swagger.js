@@ -18,6 +18,57 @@ const options = {
         },
       },
       schemas: {
+        Payment: {
+          type: "object",
+          required: [
+            "orderId",
+            "userId",
+            "amount",
+            "payosOrderId",
+            "status",
+            "paymentUrl",
+          ],
+          properties: {
+            orderId: {
+              type: "string",
+              description: "ID của đơn hàng",
+            },
+            userId: {
+              type: "string",
+              description: "ID của người dùng",
+            },
+            amount: {
+              type: "number",
+              description: "Số tiền thanh toán",
+            },
+            payosOrderId: {
+              type: "string",
+              description: "ID đơn hàng từ PayOS",
+            },
+            status: {
+              type: "string",
+              enum: ["pending", "completed", "failed", "cancelled"],
+              description: "Trạng thái thanh toán",
+            },
+            paymentUrl: {
+              type: "string",
+              description: "URL thanh toán từ PayOS",
+            },
+            description: {
+              type: "string",
+              description: "Mô tả thanh toán",
+            },
+            transactionId: {
+              type: "string",
+              description: "ID giao dịch từ PayOS",
+            },
+            paidAt: {
+              type: "string",
+              format: "date-time",
+              description: "Thời gian thanh toán thành công",
+            },
+          },
+        },
         Product: {
           type: "object",
           properties: {
@@ -81,6 +132,10 @@ const options = {
       {
         name: "AI Features",
         description: "Các chức năng AI sử dụng Google Gemini",
+      },
+      {
+        name: "Payments",
+        description: "APIs quản lý thanh toán với PayOS",
       },
     ],
     servers: [

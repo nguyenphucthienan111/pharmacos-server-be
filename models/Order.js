@@ -48,6 +48,19 @@ const orderSchema = new mongoose.Schema(
       enum: ["pending", "processing", "completed", "cancelled"],
       default: "pending",
     },
+    paymentStatus: {
+      type: String,
+      required: false, // init optional; migrate existing orders first
+      enum: [
+        "pending",
+        "success", // PayOS “Completed”/“Success”
+        "failed",
+        "cancelled",
+        "refunded",
+        "expired",
+      ],
+      default: "pending",
+    },
     totalAmount: {
       type: Number,
       required: true,

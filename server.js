@@ -81,6 +81,7 @@ const adminRoutes = require("./routes/admin");
 const staffRoutes = require("./routes/staff");
 const favoriteRoutes = require("./routes/favorites");
 const blogsRoutes = require("./routes/blogs");
+const paymentsRoutes = require("./routes/payments");
 
 // Use routes
 app.use("/api/auth", authRoutes);
@@ -93,7 +94,7 @@ app.use("/api/admin", authenticateToken, adminRoutes);
 app.use("/api/staff", authenticateToken, staffRoutes);
 app.use("/api/favorites", authenticateToken, favoriteRoutes); // Favorites management
 app.use("/api/blogs", blogsRoutes); // Blog management
-
+app.use("/api/payments", authenticateToken, paymentsRoutes); // Payment management
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
