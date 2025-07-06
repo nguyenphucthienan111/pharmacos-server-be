@@ -314,58 +314,41 @@ router.get("/analytics/products", async (req, res) => {
 
 /**
  * @swagger
- * /api/staff/analytics/inventory:
+ * /api/staff/analytics:
  *   get:
- *     summary: Get sales analytics by month/year
+ *     summary: Get inventory analytics (detailed)
  *     tags: [Staff]
  *     security:
  *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Inventory analytics data (detailed)
  */
 router.get("/analytics", async (req, res) => {
   try {
-    const { period = "month", year, month } = req.query;
-
-    const matchStage = {};
-    if (period === "month" && year && month) {
-      matchStage["salesHistory.year"] = parseInt(year);
-      matchStage["salesHistory.month"] = parseInt(month);
-    } else if (period === "year" && year) {
-      matchStage["salesHistory.year"] = parseInt(year);
-    }
-
-    const analytics = await Product.aggregate([
-      { $unwind: "$salesHistory" },
-      { $match: matchStage },
-      {
-        $group: {
-          _id: {
-            year: "$salesHistory.year",
-            month: "$salesHistory.month",
-          },
-          totalQuantitySold: { $sum: "$salesHistory.quantity" },
-          totalRevenue: { $sum: "$salesHistory.revenue" },
-          averagePrice: { $avg: "$price" },
-        },
-      },
-      { $sort: { "_id.year": 1, "_id.month": 1 } },
-    ]);
-
-    const inventoryStatus = await Product.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalProducts: { $sum: 1 },
-          totalStock: { $sum: "$stockQuantity" },
-          lowStockProducts: {
-            $sum: { $cond: [{ $lt: ["$stockQuantity", 10] }, 1, 0] },
-          },
-        },
-      },
-    ]);
-
+    // Lấy tất cả sản phẩm
+    const products = await Product.find();
+    // Tổng số lượng sản phẩm tồn kho
+    const totalItems = products.reduce((sum, p) => sum + (p.stockQuantity || 0), 0);
+    // Tổng giá trị tồn kho
+    const totalValue = products.reduce((sum, p) => sum + ((p.stockQuantity || 0) * (p.price || 0)), 0);
+    // Sản phẩm sắp hết hàng
+    const lowStock = products.filter(p => (p.stockQuantity || 0) < 10);
+    // Dữ liệu chi tiết cho bảng inventory
+    const stockLevels = products.map(p => ({
+      id: p._id,
+      name: p.name,
+      category: p.category,
+      currentStock: p.stockQuantity,
+      minStock: 10,
+      value: (p.stockQuantity || 0) * (p.price || 0),
+      status: (p.stockQuantity || 0) < 10 ? 'Low Stock' : 'In Stock',
+    }));
     res.json({
-      salesAnalytics: analytics,
-      inventoryStatus: inventoryStatus[0],
+      totalItems,
+      totalValue,
+      lowStockCount: lowStock.length,
+      stockLevels,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
