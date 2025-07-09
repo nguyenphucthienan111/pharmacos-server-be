@@ -503,10 +503,13 @@ router.post("/webhook", async (req, res) => {
           );
         }
 
-        // Update order status
+        // Update order status and payment method
         const order = await Order.findByIdAndUpdate(
           payment.orderId,
-          { paymentStatus: "success" },
+          {
+            paymentStatus: "success",
+            paymentMethod: "online",
+          },
           { new: true }
         );
 

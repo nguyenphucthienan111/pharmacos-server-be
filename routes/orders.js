@@ -307,6 +307,7 @@ router.post("/", authorize(["customer"]), async (req, res) => {
       subtotal: subtotal,
       shippingFee: shippingFee,
       note: req.body.note,
+      paymentMethod: req.body.paymentMethod || "cod", // default to cash on delivery
     });
     await order.save();
 
@@ -320,6 +321,32 @@ router.post("/", authorize(["customer"]), async (req, res) => {
       });
       await detail.save();
       orderDetails.push(detail);
+    }
+
+    // Clear customer's cart after successful order creation
+    const Cart = require("../models/Cart");
+    const CartItem = require("../models/CartItem");
+
+    try {
+      // Use req.user._id (account ID) to match cart creation logic
+      const cart = await Cart.findOne({ customerId: req.user._id });
+      if (cart) {
+        console.log(`Found cart for user ${req.user._id}, clearing items...`);
+        // Delete all cart items
+        await CartItem.deleteMany({ cartId: cart._id });
+        // Clear cart items array
+        cart.items = [];
+        cart.totalAmount = 0;
+        await cart.save();
+        console.log(
+          `Cart cleared for user ${req.user._id} after order creation`
+        );
+      } else {
+        console.log(`No cart found for user ${req.user._id}`);
+      }
+    } catch (cartError) {
+      console.error("Failed to clear cart after order creation:", cartError);
+      // Don't fail the order creation if cart clearing fails
     }
 
     const completeOrder = await Order.findById(order._id).populate(
