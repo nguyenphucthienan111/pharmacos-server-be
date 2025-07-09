@@ -394,17 +394,59 @@ router.post("/reset/:orderId", authenticateToken, async (req, res) => {
  *   post:
  *     tags: [Payments]
  *     summary: PayOS webhook để xử lý callback
+ *     description: Nhận webhook từ PayOS khi có thay đổi trạng thái thanh toán
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: Mã trạng thái từ PayOS
+ *                 example: "00"
+ *               data:
+ *                 type: object
+ *                 properties:
+ *                   orderCode:
+ *                     type: number
+ *                     description: Mã đơn hàng
+ *                   amount:
+ *                     type: number
+ *                     description: Số tiền thanh toán
+ *                   description:
+ *                     type: string
+ *                     description: Mô tả giao dịch
+ *                   transactionDateTime:
+ *                     type: string
+ *                     description: Thời gian giao dịch
  *     responses:
  *       200:
  *         description: Webhook processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
  *       400:
  *         description: Invalid webhook data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Invalid webhook data"
+ *       500:
+ *         description: Server error
  */
 router.post("/webhook", async (req, res) => {
   try {
@@ -412,12 +454,29 @@ router.post("/webhook", async (req, res) => {
 
     const webhookData = req.body;
 
+    // Handle empty body (for testing purposes)
+    if (!webhookData || Object.keys(webhookData).length === 0) {
+      console.log("Empty webhook body received (testing)");
+      return res.json({
+        success: true,
+        message: "Webhook endpoint is working. Send actual PayOS data.",
+      });
+    }
+
     // Verify webhook signature if needed
     // const isValidSignature = payOS.verifyPaymentWebhookData(webhookData);
 
     if (webhookData.code === "00" && webhookData.data) {
       // Payment successful
       const paymentData = webhookData.data;
+
+      if (!paymentData.orderCode) {
+        console.error("Missing orderCode in webhook data");
+        return res.status(400).json({
+          success: false,
+          message: "Missing orderCode in webhook data",
+        });
+      }
 
       // Update payment status in database
       const payment = await Payment.findOne({
@@ -468,10 +527,43 @@ router.post("/webhook", async (req, res) => {
         console.log(
           `Payment ${payment._id} marked as completed and cart cleared`
         );
+
+        // Return detailed success response for actual payments
+        return res.json({
+          success: true,
+          message: "Payment processed successfully",
+          data: {
+            paymentId: payment._id,
+            orderId: payment.orderId,
+            status: "completed",
+          },
+        });
+      } else {
+        console.log(
+          `Payment not found for orderCode: ${paymentData.orderCode}`
+        );
+
+        // Return informative response for unknown orderCode
+        return res.json({
+          success: true,
+          message: `No payment found for orderCode: ${paymentData.orderCode}. This may be a test or invalid orderCode.`,
+        });
       }
-    } else if (webhookData.code !== "00" && webhookData.data) {
+    } else if (
+      webhookData.code &&
+      webhookData.code !== "00" &&
+      webhookData.data
+    ) {
       // Payment failed or cancelled
       const paymentData = webhookData.data;
+
+      if (!paymentData.orderCode) {
+        console.error("Missing orderCode in failed webhook data");
+        return res.status(400).json({
+          success: false,
+          message: "Missing orderCode in webhook data",
+        });
+      }
 
       const payment = await Payment.findOne({
         payosOrderId: paymentData.orderCode.toString(),
@@ -488,16 +580,44 @@ router.post("/webhook", async (req, res) => {
         });
 
         console.log(`Payment ${payment._id} marked as failed`);
+
+        // Return detailed response for failed payments
+        return res.json({
+          success: true,
+          message: "Failed payment processed",
+          data: {
+            paymentId: payment._id,
+            orderId: payment.orderId,
+            status: "failed",
+          },
+        });
+      } else {
+        console.log(
+          `Payment not found for failed orderCode: ${paymentData.orderCode}`
+        );
+
+        // Return informative response for unknown failed orderCode
+        return res.json({
+          success: true,
+          message: `No payment found for failed orderCode: ${paymentData.orderCode}. This may be a test or invalid orderCode.`,
+        });
       }
     } else {
-      console.error("Invalid webhook data: missing data field");
+      console.log(
+        "Webhook data received but no valid code/data structure found"
+      );
       return res.status(400).json({
         success: false,
-        message: "Invalid webhook data: missing data field",
+        message:
+          "Invalid webhook data format. Expected PayOS webhook structure.",
       });
     }
 
-    res.json({ success: true });
+    // Fallback response (shouldn't reach here normally)
+    res.json({
+      success: true,
+      message: "Webhook received but no specific action taken",
+    });
   } catch (error) {
     console.error("Error processing PayOS webhook:", error);
     res.status(500).json({
