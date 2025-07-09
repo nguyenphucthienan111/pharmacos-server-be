@@ -27,6 +27,7 @@ const options = {
             "payosOrderId",
             "status",
             "paymentUrl",
+            "paymentMethod",
           ],
           properties: {
             orderId: {
@@ -53,6 +54,11 @@ const options = {
             paymentUrl: {
               type: "string",
               description: "URL thanh toán từ PayOS",
+            },
+            paymentMethod: {
+              type: "string",
+              enum: ["cod", "online", "cash", "bank"],
+              description: "Phương thức thanh toán",
             },
             description: {
               type: "string",
