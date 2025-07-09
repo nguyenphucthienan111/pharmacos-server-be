@@ -499,6 +499,7 @@ router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
  */
 router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
   try {
+    const { reason } = req.body;
     const order = await Order.findById(req.params.id);
 
     if (!order) {
@@ -515,7 +516,7 @@ router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
       });
     }
 
-    // Get order details before deletion
+    // Get order details to return products to stock
     const orderDetails = await OrderDetail.find({ orderId: order._id });
 
     // Return products to stock
@@ -525,13 +526,20 @@ router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
       });
     }
 
-    // Delete order details
-    await OrderDetail.deleteMany({ orderId: order._id });
+    // Update order status to cancelled instead of deleting
+    const updatedOrder = await Order.findByIdAndUpdate(
+      order._id,
+      {
+        status: "cancelled",
+        cancelReason: reason || "Cancelled by customer",
+      },
+      { new: true, runValidators: true }
+    );
 
-    // Delete the order
-    await Order.findByIdAndDelete(order._id);
-
-    res.json({ message: "Order cancelled and removed successfully" });
+    res.json({
+      message: "Order cancelled successfully",
+      order: updatedOrder,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
