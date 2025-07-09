@@ -76,7 +76,7 @@ try {
  */
 router.post("/create", authenticateToken, async (req, res) => {
   try {
-    const { orderId } = req.body;
+    const { orderId, paymentMethod } = req.body;
 
     if (!orderId) {
       return res.status(400).json({
@@ -95,6 +95,19 @@ router.post("/create", authenticateToken, async (req, res) => {
       });
     }
 
+    // Check if order payment has expired (for online/bank payments)
+    if (
+      (order.paymentMethod === "online" || order.paymentMethod === "bank") &&
+      order.isPaymentExpired()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Payment time has expired. This order can no longer be paid online.",
+        expired: true,
+      });
+    }
+
     // Validate customer
     const customerProfileId = req.user.profileId;
     const orderCustomerId = order.customerId?._id?.toString();
@@ -105,22 +118,37 @@ router.post("/create", authenticateToken, async (req, res) => {
       });
     }
 
-    // Check for existing pending payments
+    // Update order payment method if provided
+    if (
+      paymentMethod &&
+      ["cod", "online", "cash", "bank"].includes(paymentMethod)
+    ) {
+      order.paymentMethod = paymentMethod;
+      await order.save();
+    }
+
+    // Only create PayOS payment for online/bank methods
+    if (order.paymentMethod === "cod" || order.paymentMethod === "cash") {
+      return res.status(400).json({
+        success: false,
+        message: "COD and Cash payments do not require payment links",
+      });
+    }
+
+    // Check for existing pending payments and mark expired ones
+    await Payment.markExpiredPayments();
+
     const existingPayment = await Payment.findOne({
       orderId: order._id,
       status: "pending",
     });
 
     if (existingPayment) {
-      // Check if payment is older than 30 minutes (PayOS links typically expire)
-      const paymentAge = Date.now() - existingPayment.createdAt.getTime();
-      const thirtyMinutes = 30 * 60 * 1000; // 30 minutes in milliseconds
-
-      if (paymentAge > thirtyMinutes) {
-        console.log(
-          `Payment ${existingPayment._id} is older than 30 minutes, marking as expired`
-        );
+      // Check if existing payment has expired
+      if (existingPayment.isPaymentExpired()) {
+        console.log(`Payment ${existingPayment._id} has expired`);
         existingPayment.status = "failed";
+        existingPayment.isExpired = true;
         existingPayment.cancelledAt = new Date();
         await existingPayment.save();
       } else {
@@ -138,6 +166,12 @@ router.post("/create", authenticateToken, async (req, res) => {
               data: {
                 paymentUrl: existingPayment.paymentUrl,
                 paymentId: existingPayment._id,
+                timeLeft: Math.max(
+                  0,
+                  Math.floor(
+                    (existingPayment.paymentTimeout - Date.now()) / 1000
+                  )
+                ), // seconds left
               },
             });
           }
@@ -224,7 +258,7 @@ router.post("/create", authenticateToken, async (req, res) => {
     // Create payment link with PayOS
     const paymentLinkResponse = await payOS.createPaymentLink(paymentData);
 
-    // Create payment record in database
+    // Create payment record in database with timeout
     const payment = new Payment({
       orderId: order._id,
       userId: req.user.id,
@@ -235,6 +269,8 @@ router.post("/create", authenticateToken, async (req, res) => {
       status: "pending",
       paymentUrl: paymentLinkResponse.checkoutUrl,
       description: paymentData.description,
+      paymentMethod: order.paymentMethod || "online",
+      // paymentTimeout will be set automatically by pre-save middleware
     });
 
     await payment.save();
@@ -244,6 +280,11 @@ router.post("/create", authenticateToken, async (req, res) => {
       data: {
         paymentUrl: paymentLinkResponse.checkoutUrl,
         paymentId: payment._id,
+        timeLeft: Math.max(
+          0,
+          Math.floor((payment.paymentTimeout - Date.now()) / 1000)
+        ), // seconds left
+        expiresAt: payment.paymentTimeout,
       },
     });
   } catch (error) {
@@ -626,6 +667,68 @@ router.post("/webhook", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error processing webhook",
+      error: error.message,
+    });
+  }
+});
+
+// Add new endpoint to check payment status and time left
+router.get("/status/:orderId", authenticateToken, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    const payment = await Payment.findOne({
+      orderId: orderId,
+      status: "pending",
+    });
+
+    if (!payment) {
+      return res.json({
+        success: true,
+        data: {
+          hasActivePayment: false,
+          paymentExpired: order.isPaymentExpired(),
+        },
+      });
+    }
+
+    const isExpired = payment.isPaymentExpired();
+    if (isExpired && !payment.isExpired) {
+      // Mark as expired
+      payment.status = "failed";
+      payment.isExpired = true;
+      payment.cancelledAt = new Date();
+      await payment.save();
+    }
+
+    res.json({
+      success: true,
+      data: {
+        hasActivePayment: !isExpired,
+        paymentExpired: isExpired,
+        timeLeft: isExpired
+          ? 0
+          : Math.max(
+              0,
+              Math.floor((payment.paymentTimeout - Date.now()) / 1000)
+            ),
+        paymentUrl: isExpired ? null : payment.paymentUrl,
+        expiresAt: payment.paymentTimeout,
+      },
+    });
+  } catch (error) {
+    console.error("Error checking payment status:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error checking payment status",
       error: error.message,
     });
   }

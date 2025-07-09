@@ -63,9 +63,15 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      required: false,
-      enum: ["cash", "bank", "online", "cod"],
-      default: "cod", // cash on delivery
+      required: true,
+      enum: ["cod", "online", "cash", "bank"],
+      default: "cod",
+      description:
+        "Phương thức thanh toán: cod (COD), online (Online Payment), cash (Tiền mặt), bank (Chuyển khoản)",
+    },
+    paymentTimeout: {
+      type: Date,
+      description: "Thời gian hết hạn thanh toán cho đơn hàng online (5 phút)",
     },
     totalAmount: {
       type: Number,
@@ -99,6 +105,24 @@ const orderSchema = new mongoose.Schema(
     toObject: { virtuals: true },
   }
 );
+
+// Pre-save middleware to set payment timeout for online orders
+orderSchema.pre("save", function (next) {
+  if (
+    this.isNew &&
+    (this.paymentMethod === "online" || this.paymentMethod === "bank")
+  ) {
+    // Set timeout to 5 minutes from now
+    this.paymentTimeout = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  }
+  next();
+});
+
+// Method to check if order payment has expired
+orderSchema.methods.isPaymentExpired = function () {
+  if (!this.paymentTimeout) return false;
+  return Date.now() > this.paymentTimeout.getTime();
+};
 
 // Virtual for order details
 orderSchema.virtual("orderDetails", {
