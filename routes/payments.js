@@ -112,14 +112,53 @@ router.post("/create", authenticateToken, async (req, res) => {
     });
 
     if (existingPayment) {
-      return res.status(400).json({
-        success: false,
-        message: "A pending payment already exists for this order",
-        data: {
-          paymentUrl: existingPayment.paymentUrl,
-          paymentId: existingPayment._id,
-        },
-      });
+      // Check if payment is older than 30 minutes (PayOS links typically expire)
+      const paymentAge = Date.now() - existingPayment.createdAt.getTime();
+      const thirtyMinutes = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+      if (paymentAge > thirtyMinutes) {
+        console.log(
+          `Payment ${existingPayment._id} is older than 30 minutes, marking as expired`
+        );
+        existingPayment.status = "failed";
+        existingPayment.cancelledAt = new Date();
+        await existingPayment.save();
+      } else {
+        try {
+          // Check if existing payment is still valid with PayOS
+          const paymentInfo = await payOS.getPaymentLinkInformation(
+            existingPayment.payosOrderId
+          );
+
+          // If payment is still valid (status PENDING), return existing link
+          if (paymentInfo && paymentInfo.status === "PENDING") {
+            return res.status(400).json({
+              success: false,
+              message: "A pending payment already exists for this order",
+              data: {
+                paymentUrl: existingPayment.paymentUrl,
+                paymentId: existingPayment._id,
+              },
+            });
+          }
+
+          // If payment is expired/cancelled, mark as failed and create new one
+          console.log(
+            `Payment ${existingPayment._id} is no longer valid, creating new payment`
+          );
+          existingPayment.status = "failed";
+          existingPayment.cancelledAt = new Date();
+          await existingPayment.save();
+        } catch (error) {
+          console.log(
+            `Error checking existing payment: ${error.message}, creating new payment`
+          );
+          // If error checking PayOS (payment not found), mark as failed and create new
+          existingPayment.status = "failed";
+          existingPayment.cancelledAt = new Date();
+          await existingPayment.save();
+        }
+      }
     }
 
     // Get valid order items and calculate total
@@ -282,6 +321,68 @@ router.get("/:paymentId", authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error retrieving payment",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/payments/reset/{orderId}:
+ *   post:
+ *     tags: [Payments]
+ *     summary: Reset payment cho order (mark pending payments as failed)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID của order cần reset payment
+ *     responses:
+ *       200:
+ *         description: Reset payment thành công
+ *       401:
+ *         description: Chưa đăng nhập
+ *       404:
+ *         description: Không tìm thấy order
+ *       500:
+ *         description: Lỗi server
+ */
+router.post("/reset/:orderId", authenticateToken, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // Find and update all pending payments for this order
+    const result = await Payment.updateMany(
+      {
+        orderId: orderId,
+        status: "pending",
+      },
+      {
+        status: "failed",
+        cancelledAt: new Date(),
+      }
+    );
+
+    console.log(
+      `Reset ${result.modifiedCount} pending payments for order ${orderId}`
+    );
+
+    res.json({
+      success: true,
+      message: `Reset ${result.modifiedCount} pending payments`,
+      data: {
+        modifiedCount: result.modifiedCount,
+      },
+    });
+  } catch (error) {
+    console.error("Error resetting payments:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error resetting payments",
       error: error.message,
     });
   }

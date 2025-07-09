@@ -2,16 +2,24 @@ const mongoose = require("mongoose");
 
 const addressSchema = new mongoose.Schema(
   {
-    address: { type: String, trim: true },
-    city: { type: String, trim: true },
-    district: { type: String, trim: true },
-    ward: { type: String, trim: true },
-    addressType: { type: String, trim: true },
+    address: { type: String, required: true, trim: true },
+    city: { type: String, required: true, trim: true },
+    district: { type: String, required: true, trim: true },
+    ward: { type: String, required: true, trim: true },
+    addressType: {
+      type: String,
+      trim: true,
+      enum: ["Nhà riêng", "Văn phòng"],
+      default: "Nhà riêng",
+    },
     isDefault: { type: Boolean, default: false },
-    phone: { type: String, trim: true },
-    name: { type: String, trim: true },
+    phone: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
   },
-  { _id: true }
+  {
+    _id: true,
+    timestamps: true,
+  }
 );
 
 const customerSchema = new mongoose.Schema(
