@@ -45,7 +45,22 @@ const paymentSchema = new mongoose.Schema(
       required: true,
     },
     description: String,
-    paymentMethod: String,
+    paymentMethod: {
+      type: String,
+      required: true,
+      enum: ["cod", "online", "cash", "bank"],
+      default: "online",
+      description: "Phương thức thanh toán từ order",
+    },
+    paymentTimeout: {
+      type: Date,
+      description: "Thời gian hết hạn thanh toán (5 phút sau khi tạo)",
+    },
+    isExpired: {
+      type: Boolean,
+      default: false,
+      description: "Đánh dấu payment đã hết hạn",
+    },
     transactionId: String,
     paidAt: Date,
     cancelledAt: Date,
@@ -54,5 +69,43 @@ const paymentSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Pre-save middleware to set payment timeout for online payments
+paymentSchema.pre("save", function (next) {
+  if (
+    this.isNew &&
+    (this.paymentMethod === "online" || this.paymentMethod === "bank")
+  ) {
+    // Set timeout to 5 minutes from now
+    this.paymentTimeout = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  }
+  next();
+});
+
+// Method to check if payment has expired
+paymentSchema.methods.isPaymentExpired = function () {
+  if (!this.paymentTimeout) return false;
+  return Date.now() > this.paymentTimeout.getTime();
+};
+
+// Static method to mark expired payments
+paymentSchema.statics.markExpiredPayments = async function () {
+  const now = new Date();
+  const result = await this.updateMany(
+    {
+      paymentTimeout: { $lt: now },
+      status: "pending",
+      isExpired: false,
+    },
+    {
+      $set: {
+        status: "failed",
+        isExpired: true,
+        cancelledAt: now,
+      },
+    }
+  );
+  return result;
+};
 
 module.exports = mongoose.model("Payment", paymentSchema);
