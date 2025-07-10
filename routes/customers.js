@@ -60,36 +60,36 @@ const { authorize } = require("../middleware/auth");
  *           description: Address ID
  *         name:
  *           type: string
- *           description: Họ tên người nhận
- *           example: "Nguyễn Văn An"
+ *           description: Recipient's full name
+ *           example: "John Doe"
  *         phone:
  *           type: string
- *           description: Số điện thoại
+ *           description: Phone number
  *           example: "0778138889"
  *         city:
  *           type: string
- *           description: Tỉnh/Thành phố
- *           example: "Thành phố Hà Nội"
+ *           description: City/Province
+ *           example: "Ho Chi Minh City"
  *         district:
  *           type: string
- *           description: Quận/Huyện
- *           example: "Quận Cầu Giấy"
+ *           description: District
+ *           example: "District 1"
  *         ward:
  *           type: string
- *           description: Phường/Xã
- *           example: "Phường Dịch Vọng"
+ *           description: Ward
+ *           example: "Ben Nghe Ward"
  *         address:
  *           type: string
- *           description: Địa chỉ chi tiết
- *           example: "879, asdo, asd0"
+ *           description: Detailed address
+ *           example: "879 Main Street"
  *         addressType:
  *           type: string
- *           enum: ["Nhà riêng", "Văn phòng"]
- *           description: Loại địa chỉ
- *           example: "Nhà riêng"
+ *           enum: ["Home", "Office"]
+ *           description: Address type
+ *           example: "Home"
  *         isDefault:
  *           type: boolean
- *           description: Đặt làm địa chỉ mặc định
+ *           description: Set as default address
  *           default: false
  *         createdAt:
  *           type: string
@@ -109,37 +109,37 @@ const { authorize } = require("../middleware/auth");
  *       properties:
  *         name:
  *           type: string
- *           description: Họ tên người nhận
- *           example: "Nguyễn Văn An"
+ *           description: Recipient's full name
+ *           example: "John Doe"
  *         phone:
  *           type: string
- *           description: Số điện thoại
+ *           description: Phone number
  *           pattern: '^[0-9]{10,11}$'
  *           example: "0778138889"
  *         city:
  *           type: string
- *           description: Tỉnh/Thành phố
- *           example: "Thành phố Hà Nội"
+ *           description: City/Province
+ *           example: "Ho Chi Minh City"
  *         district:
  *           type: string
- *           description: Quận/Huyện
- *           example: "Quận Cầu Giấy"
+ *           description: District
+ *           example: "District 1"
  *         ward:
  *           type: string
- *           description: Phường/Xã
- *           example: "Phường Dịch Vọng"
+ *           description: Ward
+ *           example: "Ben Nghe Ward"
  *         address:
  *           type: string
- *           description: Địa chỉ chi tiết
- *           example: "879, asdo, asd0"
+ *           description: Detailed address
+ *           example: "879 Main Street"
  *         addressType:
  *           type: string
- *           enum: ["Nhà riêng", "Văn phòng"]
- *           description: Loại địa chỉ
- *           default: "Nhà riêng"
+ *           enum: ["Home", "Office"]
+ *           description: Address type
+ *           default: "Home"
  *         isDefault:
  *           type: boolean
- *           description: Đặt làm địa chỉ mặc định
+ *           description: Set as default address
  *           default: false
  */
 
@@ -454,14 +454,14 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
  * @swagger
  * /api/customers/addresses:
  *   get:
- *     summary: Lấy danh sách địa chỉ của customer
- *     description: Lấy tất cả địa chỉ đã lưu của customer hiện tại
+ *     summary: Get customer's address list
+ *     description: Get all saved addresses of the current customer
  *     tags: [Customer Addresses]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Danh sách địa chỉ được lấy thành công
+ *         description: Address list retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -469,14 +469,14 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
  *               items:
  *                 $ref: '#/components/schemas/Address'
  *       401:
- *         description: Chưa xác thực
+ *         description: Not authenticated
  *       404:
- *         description: Không tìm thấy địa chỉ nào
+ *         description: No addresses found
  *       500:
- *         description: Lỗi server
+ *         description: Server error
  *   post:
- *     summary: Thêm địa chỉ mới cho customer
- *     description: Tạo một địa chỉ mới cho customer. Nếu isDefault=true, tất cả địa chỉ khác sẽ được set thành không mặc định.
+ *     summary: Add new address for customer
+ *     description: Create a new address for customer. If isDefault=true, all other addresses will be set as non-default.
  *     tags: [Customer Addresses]
  *     security:
  *       - bearerAuth: []
@@ -487,23 +487,23 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
  *           schema:
  *             $ref: '#/components/schemas/AddressInput'
  *           example:
- *             name: "Nguyễn Văn An"
+ *             name: "John Doe"
  *             phone: "0778138889"
- *             city: "Thành phố Hà Nội"
- *             district: "Quận Cầu Giấy"
- *             ward: "Phường Dịch Vọng"
- *             address: "879, asdo, asd0"
- *             addressType: "Nhà riêng"
+ *             city: "Ho Chi Minh City"
+ *             district: "District 1"
+ *             ward: "Ben Nghe Ward"
+ *             address: "879 Main Street"
+ *             addressType: "Home"
  *             isDefault: true
  *     responses:
  *       201:
- *         description: Địa chỉ được tạo thành công
+ *         description: Address created successfully
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Address'
  *       400:
- *         description: Dữ liệu đầu vào không hợp lệ
+ *         description: Invalid input data
  *         content:
  *           application/json:
  *             schema:
@@ -511,11 +511,11 @@ router.put("/change-password", authorize(["customer"]), async (req, res) => {
  *               properties:
  *                 message:
  *                   type: string
- *                   example: "Vui lòng điền đầy đủ thông tin bắt buộc"
+ *                   example: "Please fill in all required information"
  *       401:
- *         description: Chưa xác thực
+ *         description: Not authenticated
  *       500:
- *         description: Lỗi server
+ *         description: Server error
  */
 router.get("/addresses", authorize(["customer"]), async (req, res) => {
   try {
@@ -535,8 +535,8 @@ router.get("/addresses", authorize(["customer"]), async (req, res) => {
  * @swagger
  * /api/customers/addresses/{id}:
  *   patch:
- *     summary: Cập nhật địa chỉ theo ID
- *     description: Cập nhật thông tin địa chỉ đã có. Nếu isDefault=true, tất cả địa chỉ khác sẽ được set thành không mặc định.
+ *     summary: Update address by ID
+ *     description: Update existing address information. If isDefault=true, all other addresses will be set as non-default.
  *     tags: [Customer Addresses]
  *     security:
  *       - bearerAuth: []
@@ -546,7 +546,7 @@ router.get("/addresses", authorize(["customer"]), async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
- *         description: ID của địa chỉ cần cập nhật
+ *         description: ID of the address to update
  *         example: "60d5ecb54f1b2c001f647ac7"
  *     requestBody:
  *       required: true
@@ -556,22 +556,22 @@ router.get("/addresses", authorize(["customer"]), async (req, res) => {
  *             $ref: '#/components/schemas/AddressInput'
  *     responses:
  *       200:
- *         description: Địa chỉ được cập nhật thành công
+ *         description: Address updated successfully
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Address'
  *       400:
- *         description: Dữ liệu đầu vào không hợp lệ
+ *         description: Invalid input data
  *       401:
- *         description: Chưa xác thực
+ *         description: Not authenticated
  *       404:
- *         description: Không tìm thấy địa chỉ
+ *         description: Address not found
  *       500:
- *         description: Lỗi server
+ *         description: Server error
  *   delete:
- *     summary: Xóa địa chỉ theo ID
- *     description: Xóa một địa chỉ đã lưu của customer
+ *     summary: Delete address by ID
+ *     description: Delete a saved address of the customer
  *     tags: [Customer Addresses]
  *     security:
  *       - bearerAuth: []
@@ -581,11 +581,11 @@ router.get("/addresses", authorize(["customer"]), async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
- *         description: ID của địa chỉ cần xóa
+ *         description: ID of the address to delete
  *         example: "60d5ecb54f1b2c001f647ac7"
  *     responses:
  *       200:
- *         description: Địa chỉ được xóa thành công
+ *         description: Address deleted successfully
  *         content:
  *           application/json:
  *             schema:
@@ -595,11 +595,11 @@ router.get("/addresses", authorize(["customer"]), async (req, res) => {
  *                   type: string
  *                   example: "Address deleted successfully"
  *       401:
- *         description: Chưa xác thực
+ *         description: Not authenticated
  *       404:
- *         description: Không tìm thấy địa chỉ
+ *         description: Address not found
  *       500:
- *         description: Lỗi server
+ *         description: Server error
  */
 
 // Update address by id
@@ -664,7 +664,7 @@ router.post("/addresses", authorize(["customer"]), async (req, res) => {
       isDefault,
     } = req.body;
 
-    // Validation - Kiểm tra các trường bắt buộc
+    // Validation - Check required fields
     const requiredFields = [
       "name",
       "phone",
@@ -679,30 +679,32 @@ router.post("/addresses", authorize(["customer"]), async (req, res) => {
 
     if (missingFields.length > 0) {
       return res.status(400).json({
-        message: `Vui lòng điền đầy đủ thông tin: ${missingFields.join(", ")}`,
+        message: `Please fill in all required information: ${missingFields.join(
+          ", "
+        )}`,
       });
     }
 
-    // Validation số điện thoại
+    // Phone number validation
     const phoneRegex = /^[0-9]{10,11}$/;
     if (!phoneRegex.test(phone.toString())) {
       return res.status(400).json({
-        message: "Số điện thoại không hợp lệ. Vui lòng nhập 10-11 chữ số",
+        message: "Invalid phone number. Please enter 10-11 digits",
       });
     }
 
-    // Validation loại địa chỉ
-    const validAddressTypes = ["Nhà riêng", "Văn phòng"];
+    // Address type validation
+    const validAddressTypes = ["Home", "Office"];
     if (addressType && !validAddressTypes.includes(addressType)) {
       return res.status(400).json({
-        message: "Loại địa chỉ không hợp lệ. Chọn 'Nhà riêng' hoặc 'Văn phòng'",
+        message: "Invalid address type. Choose 'Home' or 'Office'",
       });
     }
 
-    // Kiểm tra customer hiện tại
+    // Check current customer
     let customer = await Customer.findOne({ accountId: req.user.id });
 
-    // Nếu đặt làm mặc định và customer đã có addresses, set tất cả địa chỉ khác thành false
+    // If set as default and customer already has addresses, set all other addresses to false
     if (
       isDefault &&
       customer &&
@@ -722,12 +724,12 @@ router.post("/addresses", authorize(["customer"]), async (req, res) => {
       city: city.trim(),
       district: district.trim(),
       ward: ward.trim(),
-      addressType: addressType || "Nhà riêng",
+      addressType: addressType || "Home",
       isDefault: !!isDefault,
     };
 
     if (!customer) {
-      // Tạo customer mới nếu chưa có
+      // Create new customer if not exists
       customer = new Customer({
         name: req.user.name || name.trim(),
         email: req.user.email || "",
@@ -738,38 +740,38 @@ router.post("/addresses", authorize(["customer"]), async (req, res) => {
       await customer.save();
       return res.status(201).json({
         success: true,
-        message: "Địa chỉ được thêm thành công",
+        message: "Address added successfully",
         data: customer.addresses[0],
       });
     }
 
-    // Kiểm tra số lượng địa chỉ tối đa (giới hạn 10 địa chỉ)
+    // Check maximum address limit (limit to 10 addresses)
     if (customer.addresses && customer.addresses.length >= 10) {
       return res.status(400).json({
-        message: "Bạn đã đạt giới hạn tối đa 10 địa chỉ",
+        message: "You have reached the maximum limit of 10 addresses",
       });
     }
 
-    // Đảm bảo addresses array tồn tại
+    // Ensure addresses array exists
     if (!customer.addresses) {
       customer.addresses = [];
     }
 
-    // Push địa chỉ mới vào customer hiện tại
+    // Push new address to current customer
     customer.addresses.push(addressObj);
     await customer.save();
 
     const newAddress = customer.addresses[customer.addresses.length - 1];
     res.status(201).json({
       success: true,
-      message: "Địa chỉ được thêm thành công",
+      message: "Address added successfully",
       data: newAddress,
     });
   } catch (error) {
     console.error("Error creating address:", error);
     res.status(500).json({
       success: false,
-      message: "Lỗi server khi tạo địa chỉ",
+      message: "Server error while creating address",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
