@@ -510,4 +510,14 @@ router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
   }
 });
 
+// Lấy tất cả đơn hàng (chỉ cho admin hoặc staff)
+router.get("/", authorize(["admin", "staff"]), async (req, res) => {
+  try {
+    const orders = await Order.find().sort({ orderDate: -1 });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;
