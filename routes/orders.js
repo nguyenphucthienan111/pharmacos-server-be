@@ -36,7 +36,7 @@ const { authorize } = require("../middleware/auth");
  *           enum: [Online, POS]
  *         status:
  *           type: string
- *           enum: [pending, processing, completed, cancelled]
+ *           enum: [pending, processing, shipping, delivered, completed, cancelled]
  *         totalAmount:
  *           type: number
  *         items:
@@ -65,6 +65,240 @@ const { authorize } = require("../middleware/auth");
  *       401:
  *         description: Not authenticated
  */
+/**
+ * @swagger
+ * /api/orders/manage:
+ *   get:
+ *     summary: Get all orders for staff management
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, processing, shipping, delivered, completed, cancelled]
+ *         description: Filter orders by status
+ *       - in: query
+ *         name: paymentStatus
+ *         schema:
+ *           type: string
+ *           enum: [pending, success, failed, cancelled, refunded, expired]
+ *         description: Filter orders by payment status
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Number of orders to retrieve
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *     responses:
+ *       200:
+ *         description: Orders retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 orders:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Order'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     hasNext:
+ *                       type: boolean
+ *                     hasPrev:
+ *                       type: boolean
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ */
+router.get("/manage", authorize(["staff", "admin"]), async (req, res) => {
+  try {
+    const { status, paymentStatus, limit = 50, page = 1 } = req.query;
+
+    // Build query
+    let query = {};
+    if (status) {
+      query.status = status;
+    }
+    if (paymentStatus) {
+      query.paymentStatus = paymentStatus;
+    }
+
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+    const total = await Order.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
+
+    // Get orders with details
+    const orders = await Order.find(query)
+      .sort({ orderDate: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate("customerId", "name email phone")
+      .populate("staffId", "name email")
+      .lean();
+
+    // For each order, get details with product info
+    const ordersWithDetails = await Promise.all(
+      orders.map(async (order) => {
+        const orderDetails = await OrderDetail.find({
+          orderId: order._id,
+        }).populate({
+          path: "productId",
+          select: "name price images stockQuantity createdBy",
+          populate: {
+            path: "createdBy",
+            select: "name email",
+          },
+        });
+
+        return {
+          ...order,
+          items: orderDetails,
+          itemCount: orderDetails.reduce((sum, item) => sum + item.quantity, 0),
+        };
+      })
+    );
+
+    res.json({
+      orders: ordersWithDetails,
+      pagination: {
+        total,
+        page: parseInt(page),
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error in /manage:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/orders/stats:
+ *   get:
+ *     summary: Get order statistics for dashboard
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Order statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalOrders:
+ *                   type: integer
+ *                 ordersByStatus:
+ *                   type: object
+ *                 ordersByPaymentStatus:
+ *                   type: object
+ *                 totalRevenue:
+ *                   type: number
+ *                 recentOrders:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Order'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ */
+router.get("/stats", authorize(["staff", "admin"]), async (req, res) => {
+  try {
+    // Get total orders count
+    const totalOrders = await Order.countDocuments();
+
+    // Get orders by status
+    const ordersByStatus = await Order.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Get orders by payment status
+    const ordersByPaymentStatus = await Order.aggregate([
+      {
+        $group: {
+          _id: "$paymentStatus",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Calculate total revenue (completed orders only)
+    const revenueResult = await Order.aggregate([
+      {
+        $match: { status: "completed" },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$totalAmount" },
+        },
+      },
+    ]);
+
+    const totalRevenue =
+      revenueResult.length > 0 ? revenueResult[0].totalRevenue : 0;
+
+    // Get recent orders (last 10)
+    const recentOrders = await Order.find()
+      .sort({ orderDate: -1 })
+      .limit(10)
+      .populate("customerId", "name email")
+      .select("_id recipientName totalAmount status paymentStatus orderDate")
+      .lean();
+
+    // Format the data
+    const statusStats = {};
+    ordersByStatus.forEach((item) => {
+      statusStats[item._id] = item.count;
+    });
+
+    const paymentStats = {};
+    ordersByPaymentStatus.forEach((item) => {
+      paymentStats[item._id] = item.count;
+    });
+
+    res.json({
+      totalOrders,
+      ordersByStatus: statusStats,
+      ordersByPaymentStatus: paymentStats,
+      totalRevenue,
+      recentOrders,
+    });
+  } catch (error) {
+    console.error("Error getting order stats:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.get("/my-orders", authorize(["customer", "staff"]), async (req, res) => {
   try {
     let query = {};
@@ -307,6 +541,7 @@ router.post("/", authorize(["customer"]), async (req, res) => {
       subtotal: subtotal,
       shippingFee: shippingFee,
       note: req.body.note,
+      paymentMethod: req.body.paymentMethod || "cod", // default to cash on delivery
     });
     await order.save();
 
@@ -320,6 +555,32 @@ router.post("/", authorize(["customer"]), async (req, res) => {
       });
       await detail.save();
       orderDetails.push(detail);
+    }
+
+    // Clear customer's cart after successful order creation
+    const Cart = require("../models/Cart");
+    const CartItem = require("../models/CartItem");
+
+    try {
+      // Use req.user._id (account ID) to match cart creation logic
+      const cart = await Cart.findOne({ customerId: req.user._id });
+      if (cart) {
+        console.log(`Found cart for user ${req.user._id}, clearing items...`);
+        // Delete all cart items
+        await CartItem.deleteMany({ cartId: cart._id });
+        // Clear cart items array
+        cart.items = [];
+        cart.totalAmount = 0;
+        await cart.save();
+        console.log(
+          `Cart cleared for user ${req.user._id} after order creation`
+        );
+      } else {
+        console.log(`No cart found for user ${req.user._id}`);
+      }
+    } catch (cartError) {
+      console.error("Failed to clear cart after order creation:", cartError);
+      // Don't fail the order creation if cart clearing fails
     }
 
     const completeOrder = await Order.findById(order._id).populate(
@@ -340,7 +601,7 @@ router.post("/", authorize(["customer"]), async (req, res) => {
  * @swagger
  * /api/orders/{id}/status:
  *   patch:
- *     summary: Update order status (staff only)
+ *     summary: Update order status (staff only - limited to their products)
  *     tags: [Orders]
  *     security:
  *       - bearerAuth: []
@@ -361,7 +622,7 @@ router.post("/", authorize(["customer"]), async (req, res) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, processing, completed, cancelled]
+ *                 enum: [pending, processing, shipping, delivered, completed, cancelled]
  *               cancelReason:
  *                 type: string
  *                 description: Required when status is cancelled
@@ -382,10 +643,17 @@ router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
     const { status, cancelReason } = req.body;
 
     // Validate status enum
-    if (!["pending", "processing", "completed", "cancelled"].includes(status)) {
+    const validStatuses = [
+      "pending",
+      "processing",
+      "shipping",
+      "delivered",
+      "completed",
+      "cancelled",
+    ];
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({
-        message:
-          "Invalid status. Must be one of: pending, processing, completed, cancelled",
+        message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
       });
     }
 
@@ -472,6 +740,7 @@ router.patch("/:id/status", authorize(["staff"]), async (req, res) => {
  */
 router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
   try {
+    const { reason } = req.body;
     const order = await Order.findById(req.params.id);
 
     if (!order) {
@@ -488,7 +757,7 @@ router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
       });
     }
 
-    // Get order details before deletion
+    // Get order details to return products to stock
     const orderDetails = await OrderDetail.find({ orderId: order._id });
 
     // Return products to stock
@@ -498,26 +767,163 @@ router.post("/:id/cancel", authorize(["customer"]), async (req, res) => {
       });
     }
 
-    // Delete order details
-    await OrderDetail.deleteMany({ orderId: order._id });
+    // Update order status to cancelled instead of deleting
+    const updatedOrder = await Order.findByIdAndUpdate(
+      order._id,
+      {
+        status: "cancelled",
+        cancelReason: reason || "Cancelled by customer",
+      },
+      { new: true, runValidators: true }
+    );
 
-    // Delete the order
-    await Order.findByIdAndDelete(order._id);
-
-    res.json({ message: "Order cancelled and removed successfully" });
+    res.json({
+      message: "Order cancelled successfully",
+      order: updatedOrder,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Lấy tất cả đơn hàng (chỉ cho admin hoặc staff)
-router.get("/", authorize(["admin", "staff"]), async (req, res) => {
-  try {
-    const orders = await Order.find().sort({ orderDate: -1 });
-    res.json(orders);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+/**
+ * @swagger
+ * /api/orders/{id}/update-status:
+ *   patch:
+ *     summary: Update order status (staff/admin can update any order - for management)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, processing, shipping, delivered, completed, cancelled]
+ *               note:
+ *                 type: string
+ *                 description: Optional note about the status change
+ *               cancelReason:
+ *                 type: string
+ *                 description: Required when status is cancelled
+ *     responses:
+ *       200:
+ *         description: Order status updated successfully
+ *       400:
+ *         description: Invalid status or missing cancel reason
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Order not found
+ */
+router.patch(
+  "/:id/update-status",
+  authorize(["staff", "admin"]),
+  async (req, res) => {
+    try {
+      const { status, note, cancelReason } = req.body;
+
+      // Validate status enum
+      const validStatuses = [
+        "pending",
+        "processing",
+        "shipping",
+        "delivered",
+        "completed",
+        "cancelled",
+      ];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({
+          message: `Invalid status. Must be one of: ${validStatuses.join(
+            ", "
+          )}`,
+        });
+      }
+
+      // Find order
+      const order = await Order.findById(req.params.id).populate(
+        "customerId",
+        "name email"
+      );
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      // Handle status change validation
+      const updateData = {
+        status,
+        staffId: req.user.profileId, // Track which staff updated the order
+      };
+
+      if (status === "cancelled") {
+        // Require cancelReason when changing to cancelled
+        if (!cancelReason) {
+          return res.status(400).json({
+            message: "Cancel reason is required when cancelling an order",
+          });
+        }
+        updateData.cancelReason = cancelReason;
+
+        // Return products to stock when cancelling
+        const orderDetails = await OrderDetail.find({ orderId: order._id });
+        for (const detail of orderDetails) {
+          await Product.findByIdAndUpdate(detail.productId, {
+            $inc: { stockQuantity: detail.quantity },
+          });
+        }
+      } else {
+        // Remove cancelReason when changing to other statuses
+        updateData.cancelReason = undefined;
+      }
+
+      // Add note if provided
+      if (note) {
+        updateData.note = note;
+      }
+
+      // Update in database with validation
+      const updatedOrder = await Order.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { new: true, runValidators: true }
+      )
+        .populate("customerId", "name email")
+        .populate("staffId", "name email");
+
+      // Get order details for complete response
+      const orderDetails = await OrderDetail.find({
+        orderId: updatedOrder._id,
+      }).populate({
+        path: "productId",
+        select: "name price images",
+      });
+
+      res.json({
+        message: "Order status updated successfully",
+        order: {
+          ...updatedOrder.toObject(),
+          items: orderDetails,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      res.status(400).json({ message: error.message });
+    }
   }
-});
+);
 
 module.exports = router;
