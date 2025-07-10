@@ -13,10 +13,6 @@ const sendVerificationEmail = async (email, verificationToken) => {
     console.log("Development mode: Email sending skipped");
     console.log("Verification would have been sent to:", email);
     console.log("Verification token:", verificationToken);
-    console.log(
-      "Verification URL would be:",
-      `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`
-    );
     return true;
   }
 
@@ -57,8 +53,8 @@ const sendVerificationEmail = async (email, verificationToken) => {
               Verify Email
             </a>
           </div>
-          <p>Or copy and paste this URL into your browser:</p>
-          <p style="color: #666; word-break: break-all;">${verificationUrl}</p>
+          <p>Or copy and paste this token:</p>
+          <p style="color: #666; word-break: break-all; font-family: monospace; background: #f5f5f5; padding: 10px; border-radius: 5px;">${verificationToken}</p>
           <p>This link will expire in 24 hours.</p>
         </div>
       `,
