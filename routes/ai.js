@@ -141,6 +141,17 @@ function extractProductInfo(geminiText) {
     "benefit",
     "too faced",
     "urban decay",
+    "luomthom",
+    "luomthom haircare",
+    "luomthiom",
+    "luomthiom haircare",
+    "tresemme",
+    "head & shoulders",
+    "pantene",
+    "herbal essences",
+    "aussie",
+    "schwarzkopf",
+    "garnier",
   ];
 
   // Tìm brand trong toàn bộ text, không chỉ trong tên
@@ -149,7 +160,7 @@ function extractProductInfo(geminiText) {
     productInfo.brand = foundBrand;
   }
 
-  // Xác định loại sản phẩm (mở rộng cho makeup)
+  // Xác định loại sản phẩm (mở rộng cho makeup và hair care)
   const productTypes = {
     serum: ["serum", "sérum"],
     cream: ["cream", "kem"],
@@ -165,6 +176,12 @@ function extractProductInfo(geminiText) {
     blush: ["blush", "má hồng", "phấn má"],
     concealer: ["concealer", "che khuyết điểm"],
     highlighter: ["highlighter", "bắt sáng"],
+    shampoo: ["shampoo", "dầu gội", "hair shampoo"],
+    conditioner: ["conditioner", "dầu xả", "hair conditioner"],
+    haircare: ["hair care", "chăm sóc tóc", "haircare"],
+    hairoil: ["hair oil", "dầu dưỡng tóc"],
+    hairmask: ["hair mask", "mặt nạ tóc"],
+    hairspray: ["hair spray", "keo xịt tóc"],
   };
 
   for (const [type, keywords] of Object.entries(productTypes)) {
@@ -303,36 +320,88 @@ function matchProduct(productInfo, dbProduct) {
 
       // Exact brand match gets full points
       if (dbBrandNorm === searchBrandNorm) {
-        brandScore = 30; // Giảm từ 35 xuống 30 để dành điểm cho name
+        brandScore = 30;
         break;
       }
-      // Very close match
+      // Very close match (one contains the other)
       else if (
         dbBrandNorm.includes(searchBrandNorm) ||
         searchBrandNorm.includes(dbBrandNorm)
       ) {
-        brandScore = Math.max(brandScore, 20);
+        brandScore = Math.max(brandScore, 25); // Tăng từ 20 lên 25
+      }
+      // Partial word match - for "luomthom haircare" vs "luomthom"
+      else {
+        const dbWords = dbBrandNorm.split(/\s+/);
+        const searchWords = searchBrandNorm.split(/\s+/);
+        let commonWords = 0;
+
+        for (const searchWord of searchWords) {
+          if (
+            dbWords.some(
+              (dbWord) =>
+                dbWord.includes(searchWord) || searchWord.includes(dbWord)
+            )
+          ) {
+            commonWords++;
+          }
+        }
+
+        if (commonWords > 0) {
+          const wordMatchRatio =
+            commonWords / Math.max(dbWords.length, searchWords.length);
+          brandScore = Math.max(brandScore, Math.round(wordMatchRatio * 20)); // Up to 20 points for partial
+        }
       }
     }
 
     score += brandScore;
   }
 
-  // So khớp loại sản phẩm (10 điểm)
+  // So khớp loại sản phẩm (15 điểm)
   if (productInfo.type) {
     const subcategory = normalizeText(dbProduct.subcategory || "");
     const category = normalizeText(dbProduct.category || "");
     const searchType = normalizeText(productInfo.type);
 
     if (subcategory === searchType || category === searchType) {
-      score += 10; // Exact match
+      score += 15; // Exact match - tăng từ 10 lên 15
     } else if (
       subcategory.includes(searchType) ||
       category.includes(searchType) ||
       searchType.includes(subcategory) ||
       searchType.includes(category)
     ) {
-      score += 5; // Partial match
+      score += 8; // Partial match - tăng từ 5 lên 8
+    }
+  }
+
+  // Bonus điểm cho keywords trong tên sản phẩm (10 điểm)
+  const productNameLower = normalizeText(dbProduct.name);
+  const searchNameLower = normalizeText(productInfo.name);
+  const keywords = searchNameLower
+    .split(/\s+/)
+    .filter((word) => word.length > 3);
+
+  let keywordMatches = 0;
+  for (const keyword of keywords) {
+    if (productNameLower.includes(keyword)) {
+      keywordMatches++;
+    }
+  }
+
+  if (keywords.length > 0) {
+    const keywordBonus = (keywordMatches / keywords.length) * 10;
+    score += keywordBonus;
+
+    if (keywordMatches > 0) {
+      console.log(
+        `🔍 Keyword bonus: ${Math.round(
+          keywordBonus
+        )} points (${keywordMatches}/${keywords.length} keywords: ${keywords
+          .filter((kw) => productNameLower.includes(kw))
+          .join(", ")})`
+      );
     }
   }
 
@@ -361,7 +430,12 @@ function matchProduct(productInfo, dbProduct) {
   }
 
   // Console log score breakdown cho debug
-  if (dbProduct.name.toLowerCase().includes("chanel") || score > 30) {
+  if (
+    dbProduct.name.toLowerCase().includes("chanel") ||
+    dbProduct.name.toLowerCase().includes("luomthom") ||
+    dbProduct.name.toLowerCase().includes("avocado") ||
+    score > 30
+  ) {
     console.log(`📊 SCORE BREAKDOWN: "${dbProduct.name}"`);
     console.log(`   📝 Search: "${productInfo.name}"`);
     console.log(
