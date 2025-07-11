@@ -28,19 +28,10 @@ const orderDetailSchema = new mongoose.Schema(
   }
 );
 
-// Update product stock quantity after saving order detail
-orderDetailSchema.post("save", async function () {
-  try {
-    const Product = mongoose.model("Product");
-    await Product.findByIdAndUpdate(this.productId, {
-      $inc: { stockQuantity: -this.quantity },
-    });
-  } catch (error) {
-    console.error("Error updating product stock:", error);
-  }
-});
+// Note: Stock quantity is updated only when payment is completed
+// This prevents stock from being locked for unpaid orders
 
-// Restore stock quantity if order detail is deleted
+// Restore stock quantity if order detail is deleted (for admin purposes)
 orderDetailSchema.post("remove", async function () {
   try {
     const Product = mongoose.model("Product");

@@ -2,7 +2,58 @@ const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
 const ImageSearch = require("../models/AIModels");
+const Order = require("../models/Order");
+const OrderDetail = require("../models/OrderDetail");
 const { authorize, authenticateToken } = require("../middleware/auth");
+
+// Helper function to transform reviews for safe display
+const transformReviewsForDisplay = (reviews) => {
+  return reviews.map((review) => ({
+    user: {
+      username:
+        review.userId?.name || review.userId?.username || "Anonymous User",
+    },
+    rating: review.rating,
+    comment: review.comment,
+    _id: review._id,
+    createdAt: review.createdAt,
+  }));
+};
+
+// Helper function to calculate average rating
+const calculateAverageRating = (reviews) => {
+  if (!reviews || reviews.length === 0) return 0;
+  const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
+  return Math.round((sum / reviews.length) * 10) / 10; // Round to 1 decimal place
+};
+
+// Helper function to check if customer has purchased a product
+const hasCustomerPurchasedProduct = async (customerId, productId) => {
+  try {
+    // Find completed/delivered orders by this customer
+    const orders = await Order.find({
+      customerId: customerId,
+      status: { $in: ["completed", "delivered"] },
+      paymentStatus: "success",
+    });
+
+    if (orders.length === 0) {
+      return false;
+    }
+
+    // Check if any of these orders contain the specific product
+    const orderIds = orders.map((order) => order._id);
+    const orderDetail = await OrderDetail.findOne({
+      orderId: { $in: orderIds },
+      productId: productId,
+    });
+
+    return !!orderDetail;
+  } catch (error) {
+    console.error("Error checking purchase history:", error);
+    return false;
+  }
+};
 
 /**
  * @swagger
@@ -384,7 +435,7 @@ router.get("/:id", async (req, res) => {
     }
 
     const product = await Product.findById(req.params.id)
-      .populate("reviews.userId", "username email") // Populate review user details
+      .populate("reviews.userId", "name email") // Populate review user details from Customer model
       .select("-__v"); // Exclude version field
 
     if (!product) {
@@ -392,6 +443,14 @@ router.get("/:id", async (req, res) => {
         success: false,
         message: "Product not found",
       });
+    }
+
+    // Transform reviews for safe display
+    const transformedProduct = product.toObject();
+    if (transformedProduct.reviews && transformedProduct.reviews.length > 0) {
+      transformedProduct.reviews = transformReviewsForDisplay(
+        transformedProduct.reviews
+      );
     }
 
     // Tìm các sản phẩm có cùng subcategory
@@ -405,7 +464,7 @@ router.get("/:id", async (req, res) => {
     res.json({
       success: true,
       data: {
-        product,
+        product: transformedProduct,
         similarProducts: similarProducts.map((p) => ({
           product: p,
         })),
@@ -727,7 +786,11 @@ router.post(
  * @swagger
  * /api/products/{id}/reviews:
  *   post:
- *     summary: Add a review to a product
+ *     summary: Add or update a review for a product (only for purchased products)
+ *     description: |
+ *       Add a new review or update an existing review for a product.
+ *       Customer can only review products they have purchased and received.
+ *       If a review already exists, it will be updated instead of creating a new one.
  *     tags: [Products]
  *     security:
  *       - bearerAuth: []
@@ -737,6 +800,7 @@ router.post(
  *         required: true
  *         schema:
  *           type: string
+ *         description: Product ID
  *     requestBody:
  *       required: true
  *       content:
@@ -756,11 +820,13 @@ router.post(
  *                 description: Review comment
  *     responses:
  *       200:
- *         description: Review added successfully
+ *         description: Review added or updated successfully
  *       400:
- *         description: Invalid rating or user already reviewed
+ *         description: Invalid rating
  *       401:
  *         description: Not authenticated
+ *       403:
+ *         description: Product not purchased - can only review purchased products
  *       404:
  *         description: Product not found
  */
@@ -782,34 +848,58 @@ router.post("/:id/reviews", authenticateToken, async (req, res) => {
       });
     }
 
-    // Check if user has already reviewed
-    const existingReview = product.reviews.find(
-      (review) => review.userId?.toString() === req.user.profileId
+    // Check if customer has purchased this product
+    const hasPurchased = await hasCustomerPurchasedProduct(
+      req.user.profileId,
+      req.params.id
     );
-    if (existingReview) {
-      return res.status(400).json({
+    if (!hasPurchased) {
+      return res.status(403).json({
         success: false,
-        message: "You have already reviewed this product",
+        message:
+          "You can only review products that you have purchased and received",
       });
     }
 
-    const newReview = {
-      userId: req.user.profileId,
-      rating,
-      comment,
-    };
+    // Check if user has already reviewed
+    const existingReviewIndex = product.reviews.findIndex(
+      (review) => review.userId?.toString() === req.user.profileId
+    );
 
-    product.reviews.push(newReview);
-    await product.save();
+    if (existingReviewIndex !== -1) {
+      // Update existing review
+      product.reviews[existingReviewIndex].rating = rating;
+      product.reviews[existingReviewIndex].comment = comment;
+      product.reviews[existingReviewIndex].createdAt = new Date();
 
-    res.json({
-      success: true,
-      data: newReview,
-    });
+      await product.save();
+
+      return res.json({
+        success: true,
+        data: product.reviews[existingReviewIndex],
+        message: "Review updated successfully",
+      });
+    } else {
+      // Create new review
+      const newReview = {
+        userId: req.user.profileId,
+        rating,
+        comment,
+      };
+
+      product.reviews.push(newReview);
+      await product.save();
+
+      res.json({
+        success: true,
+        data: newReview,
+        message: "Review added successfully",
+      });
+    }
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Error adding review",
+      message: "Error adding/updating review",
       error: error.message,
     });
   }
@@ -850,20 +940,31 @@ router.post("/:id/reviews", authenticateToken, async (req, res) => {
  *                   items:
  *                     type: object
  *                     properties:
- *                       userId:
+ *                       user:
  *                         type: object
  *                         properties:
  *                           username:
  *                             type: string
- *                           email:
- *                             type: string
+ *                             description: Display name of the reviewer (for privacy, userId and email are hidden)
  *                       rating:
  *                         type: number
  *                       comment:
  *                         type: string
+ *                       _id:
+ *                         type: string
+ *                         description: Review ID
  *                       createdAt:
  *                         type: string
  *                         format: date-time
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalReviews:
+ *                       type: integer
+ *                       description: Total number of reviews
+ *                     averageRating:
+ *                       type: number
+ *                       description: Average rating (1-5, rounded to 1 decimal place)
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -881,7 +982,9 @@ router.post("/:id/reviews", authenticateToken, async (req, res) => {
 router.get("/:id/reviews", async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const product = await Product.findById(req.params.id).select("reviews");
+    const product = await Product.findById(req.params.id)
+      .select("reviews")
+      .populate("reviews.userId", "name email"); // Populate user info from Customer model
 
     if (!product) {
       return res.status(404).json({
@@ -896,21 +999,21 @@ router.get("/:id/reviews", async (req, res) => {
     const total = product.reviews.length;
 
     // Sort reviews by date (newest first) and paginate
-    const paginatedReviews = product.reviews
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(startIndex, endIndex)
-      .map((review) => ({
-        userId: review.userId,
-        rating: review.rating,
-        comment: review.comment,
-        _id: review._id,
-        createdAt: review.createdAt,
-      }));
+    const sortedReviews = product.reviews.sort(
+      (a, b) => b.createdAt - a.createdAt
+    );
+    const paginatedReviews = transformReviewsForDisplay(
+      sortedReviews.slice(startIndex, endIndex)
+    );
 
     res.json({
       success: true,
       data: {
         reviews: paginatedReviews,
+        summary: {
+          totalReviews: total,
+          averageRating: calculateAverageRating(product.reviews),
+        },
         pagination: {
           total,
           totalPages: Math.ceil(total / limit),
@@ -923,6 +1026,123 @@ router.get("/:id/reviews", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching reviews",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/products/{id}/reviews/{reviewId}:
+ *   put:
+ *     summary: Update a review for a product
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Product ID
+ *       - in: path
+ *         name: reviewId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Review ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rating
+ *             properties:
+ *               rating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: Updated rating from 1 to 5
+ *               comment:
+ *                 type: string
+ *                 description: Updated review comment
+ *     responses:
+ *       200:
+ *         description: Review updated successfully
+ *       400:
+ *         description: Invalid rating
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized or product not purchased
+ *       404:
+ *         description: Product or review not found
+ */
+router.put("/:id/reviews/:reviewId", authenticateToken, async (req, res) => {
+  try {
+    const { rating, comment } = req.body;
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating must be between 1 and 5",
+      });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // Check if customer has purchased this product
+    const hasPurchased = await hasCustomerPurchasedProduct(
+      req.user.profileId,
+      req.params.id
+    );
+    if (!hasPurchased) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You can only update reviews for products that you have purchased and received",
+      });
+    }
+
+    // Find the specific review
+    const reviewIndex = product.reviews.findIndex(
+      (review) =>
+        review._id.toString() === req.params.reviewId &&
+        review.userId?.toString() === req.user.profileId
+    );
+
+    if (reviewIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Review not found or you are not authorized to update this review",
+      });
+    }
+
+    // Update the review
+    product.reviews[reviewIndex].rating = rating;
+    product.reviews[reviewIndex].comment = comment;
+    product.reviews[reviewIndex].createdAt = new Date();
+
+    await product.save();
+
+    res.json({
+      success: true,
+      data: product.reviews[reviewIndex],
+      message: "Review updated successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error updating review",
       error: error.message,
     });
   }
@@ -947,6 +1167,180 @@ router.post("/search/image", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/products/test/create-purchase:
+ *   post:
+ *     summary: Create test purchase for review testing (Development only)
+ *     description: Creates a mock completed order for a customer to enable review testing
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - productId
+ *             properties:
+ *               productId:
+ *                 type: string
+ *                 description: Product ID to create purchase for
+ *               quantity:
+ *                 type: number
+ *                 default: 1
+ *                 description: Quantity purchased
+ *     responses:
+ *       201:
+ *         description: Test purchase created successfully
+ *       400:
+ *         description: Invalid product ID
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Product not found
+ */
+router.post("/test/create-purchase", authenticateToken, async (req, res) => {
+  try {
+    const { productId, quantity = 1 } = req.body;
+
+    // Verify product exists
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    // Create a test order
+    const testOrder = new Order({
+      customerId: req.user.profileId,
+      recipientName: "Test Customer",
+      phone: "0123456789",
+      email: "test@example.com",
+      shippingAddress: "Test Address, Test City",
+      status: "completed",
+      paymentStatus: "success",
+      paymentMethod: "online",
+      subtotal: product.price * quantity,
+      shippingFee: 30000,
+      totalAmount: product.price * quantity + 30000,
+      orderDate: new Date(),
+    });
+
+    await testOrder.save();
+
+    // Create order detail
+    const orderDetail = new OrderDetail({
+      orderId: testOrder._id,
+      productId: productId,
+      quantity: quantity,
+      unitPrice: product.price,
+    });
+
+    await orderDetail.save();
+
+    res.status(201).json({
+      success: true,
+      message:
+        "Test purchase created successfully. You can now review this product.",
+      data: {
+        orderId: testOrder._id,
+        productId: productId,
+        quantity: quantity,
+        totalAmount: testOrder.totalAmount,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating test purchase:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating test purchase",
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/products/test/my-purchases:
+ *   get:
+ *     summary: Get customer's purchased products (Development only)
+ *     description: Returns list of products customer has purchased to debug review permissions
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Purchased products retrieved successfully
+ *       401:
+ *         description: Not authenticated
+ */
+router.get("/test/my-purchases", authenticateToken, async (req, res) => {
+  try {
+    // Find completed/delivered orders by this customer
+    const orders = await Order.find({
+      customerId: req.user.profileId,
+      status: { $in: ["completed", "delivered"] },
+      paymentStatus: "success",
+    });
+
+    if (orders.length === 0) {
+      return res.json({
+        success: true,
+        message: "No completed purchases found",
+        data: {
+          orders: [],
+          purchasedProducts: [],
+        },
+      });
+    }
+
+    // Get all order details for these orders
+    const orderIds = orders.map((order) => order._id);
+    const orderDetails = await OrderDetail.find({
+      orderId: { $in: orderIds },
+    }).populate("productId", "name price");
+
+    // Get unique product IDs
+    const purchasedProductIds = orderDetails.map(
+      (detail) => detail.productId._id
+    );
+
+    res.json({
+      success: true,
+      data: {
+        totalOrders: orders.length,
+        orders: orders.map((order) => ({
+          _id: order._id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          totalAmount: order.totalAmount,
+          orderDate: order.orderDate,
+        })),
+        totalPurchasedProducts: orderDetails.length,
+        purchasedProducts: orderDetails.map((detail) => ({
+          productId: detail.productId._id,
+          productName: detail.productId.name,
+          quantity: detail.quantity,
+          unitPrice: detail.unitPrice,
+        })),
+        uniqueProductIds: [...new Set(purchasedProductIds)],
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching purchases:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching purchases",
+      error: error.message,
+    });
   }
 });
 
@@ -1139,7 +1533,7 @@ router.patch(
         product.images = updateFields.images;
         delete updateFields.images;
       }
-      
+
       // Cập nhật các trường còn lại
       Object.assign(product, updateFields);
       await product.save();

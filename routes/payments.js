@@ -530,7 +530,8 @@ router.post("/webhook", async (req, res) => {
         payment.paidAt = new Date();
         await payment.save();
 
-        // Get order details and update product stock
+        // Get order details and update product stock (only on payment success)
+        // This ensures stock is only decreased when customer actually pays
         const orderDetails = await OrderDetail.find({
           orderId: payment.orderId,
         });
@@ -540,7 +541,7 @@ router.post("/webhook", async (req, res) => {
             $inc: { stockQuantity: -detail.quantity },
           });
           console.log(
-            `Updated stock for product ${detail.productId}, -${detail.quantity} units`
+            `Stock reduced for product ${detail.productId}: -${detail.quantity} units (payment success)`
           );
         }
 

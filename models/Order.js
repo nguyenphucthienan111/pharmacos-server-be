@@ -105,6 +105,12 @@ const orderSchema = new mongoose.Schema(
       },
       trim: true,
     },
+    stockDeducted: {
+      type: Boolean,
+      default: false,
+      description:
+        "Track whether stock has been deducted for this order to prevent double deduction",
+    },
   },
   {
     timestamps: true,
