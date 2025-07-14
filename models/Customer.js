@@ -9,8 +9,8 @@ const addressSchema = new mongoose.Schema(
     addressType: {
       type: String,
       trim: true,
-      enum: ["Nhà riêng", "Văn phòng"],
-      default: "Nhà riêng",
+      enum: ["Home", "Office"],
+      default: "Home",
     },
     isDefault: { type: Boolean, default: false },
     phone: { type: String, required: true, trim: true },
