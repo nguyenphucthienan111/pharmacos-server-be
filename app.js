@@ -4,11 +4,11 @@ var path = require("path");
 var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 var cors = require("cors");
-const passport = require('passport');
+const passport = require("passport");
 const { swaggerUi, swaggerSpec } = require("./swagger");
 
 // Passport configuration
-require('./config/passport');
+require("./config/passport");
 
 var indexRouter = require("./routes/index");
 var usersRouter = require("./routes/users");
@@ -16,6 +16,9 @@ var aiRouter = require("./routes/ai");
 var authRouter = require("./routes/auth");
 var blogsRouter = require("./routes/blogs");
 var paymentsRouter = require("./routes/payments");
+var batchesRouter = require("./routes/batches");
+var suppliersRouter = require("./routes/suppliers");
+var stockMovementsRouter = require("./routes/stock-movements");
 
 var app = express();
 
@@ -45,6 +48,9 @@ app.use("/api/ai", aiRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/blogs", blogsRouter);
 app.use("/api/payments", paymentsRouter);
+app.use("/api/batches", batchesRouter);
+app.use("/api/suppliers", suppliersRouter);
+app.use("/api/stock-movements", stockMovementsRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

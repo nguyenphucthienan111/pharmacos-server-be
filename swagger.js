@@ -143,6 +143,14 @@ const options = {
         name: "Payments",
         description: "APIs quản lý thanh toán với PayOS",
       },
+      {
+        name: "Inventory Management",
+        description: "APIs quản lý lô hàng và tồn kho",
+      },
+      {
+        name: "Supplier Management",
+        description: "APIs quản lý nhà cung cấp",
+      },
     ],
     servers: [
       {

@@ -5,6 +5,7 @@ const OrderDetail = require("../models/OrderDetail");
 const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 const CartItem = require("../models/CartItem");
+const Supplier = require("../models/Supplier"); // Added Supplier model
 const { authorize } = require("../middleware/auth");
 
 /**

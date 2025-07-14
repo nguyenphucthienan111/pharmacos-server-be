@@ -7,6 +7,11 @@ const productSchema = new mongoose.Schema(
       ref: "Account",
       required: true,
     },
+    supplierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Supplier",
+      required: true,
+    },
     ingredients: [
       new mongoose.Schema(
         {

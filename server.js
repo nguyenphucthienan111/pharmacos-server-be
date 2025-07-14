@@ -82,6 +82,8 @@ const staffRoutes = require("./routes/staff");
 const favoriteRoutes = require("./routes/favorites");
 const blogsRoutes = require("./routes/blogs");
 const paymentsRoutes = require("./routes/payments");
+const supplierRoutes = require("./routes/suppliers");
+const batchRoutes = require("./routes/batches");
 
 // Use routes
 app.use("/api/auth", authRoutes);
@@ -95,6 +97,8 @@ app.use("/api/staff", authenticateToken, staffRoutes);
 app.use("/api/favorites", authenticateToken, favoriteRoutes); // Favorites management
 app.use("/api/blogs", blogsRoutes); // Blog management
 app.use("/api/payments", authenticateToken, paymentsRoutes); // Payment management
+app.use("/api/suppliers", supplierRoutes); // Supplier management
+app.use("/api/batches", batchRoutes); // Batch management
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
