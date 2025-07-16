@@ -55,6 +55,30 @@ const hasCustomerPurchasedProduct = async (customerId, productId) => {
   }
 };
 
+// Helper: auto sale 10% nếu gần hết hạn
+function applyAutoSale(product) {
+  if (!product.expiryDate) return product;
+  const today = new Date();
+  const expiry = new Date(product.expiryDate);
+  if (isNaN(expiry.getTime())) return product;
+  const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays <= 30) {
+    // Nếu đã có salePrice nhỏ hơn 10% thì giữ nguyên
+    const tenPercent = Math.round(product.price * 0.9);
+    if (!product.salePrice || product.salePrice > tenPercent) {
+      product.salePrice = tenPercent;
+      product.isOnSale = true;
+    }
+  } else {
+    // Hết thời gian sale tự động
+    if (product.isOnSale && product.salePrice === Math.round(product.price * 0.9)) {
+      product.isOnSale = false;
+      product.salePrice = null;
+    }
+  }
+  return product;
+}
+
 /**
  * @swagger
  * components:
@@ -235,11 +259,12 @@ router.get("/", async (req, res) => {
       .select("-__v");
 
     const total = await Product.countDocuments(filter);
-
+    // Áp dụng auto sale cho từng sản phẩm
+    const productsWithAutoSale = products.map(p => applyAutoSale(p.toObject ? p.toObject() : p));
     res.json({
       success: true,
       data: {
-        products,
+        products: productsWithAutoSale,
         pagination: {
           total,
           totalPages: Math.ceil(total / limit),
@@ -453,6 +478,9 @@ router.get("/:id", async (req, res) => {
       );
     }
 
+    // Áp dụng auto sale nếu gần hết hạn
+    const productWithAutoSale = applyAutoSale(transformedProduct);
+
     // Tìm các sản phẩm có cùng subcategory
     const similarProducts = await Product.find({
       subcategory: product.subcategory,
@@ -464,7 +492,7 @@ router.get("/:id", async (req, res) => {
     res.json({
       success: true,
       data: {
-        product: transformedProduct,
+        product: productWithAutoSale,
         similarProducts: similarProducts.map((p) => ({
           product: p,
         })),
@@ -1543,6 +1571,82 @@ router.patch(
       res.json(product);
     } catch (error) {
       res.status(400).json({ message: error.message });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/products/{id}/sale:
+ *   patch:
+ *     summary: Set sale price for a product (staff only)
+ *     description: Set a sale price for a product if it's near expiry. Only the salePrice and isOnSale fields are updated.
+ *     tags: [Products]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               salePrice:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Sale price for the product. Must be less than the original price.
+ *               isOnSale:
+ *                 type: boolean
+ *                 description: Whether the product is on sale. If not provided, it will be true.
+ *     responses:
+ *       200:
+ *         description: Sale price updated successfully
+ *       400:
+ *         description: Invalid sale price, not less than original price, or product not near expiry.
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Product not found
+ */
+router.patch(
+  "/:id/sale",
+  [authenticateToken, authorize(["staff"])],
+  async (req, res) => {
+    try {
+      const { salePrice, isOnSale } = req.body;
+      const product = await Product.findById(req.params.id);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      // Chỉ cho phép sale nếu còn dưới 30 ngày hết hạn
+      const today = new Date();
+      const expiry = new Date(product.expiryDate);
+      const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+      if (diffDays > 30) {
+        return res.status(400).json({ message: "Chỉ được sale khi sản phẩm còn dưới 30 ngày hết hạn!" });
+      }
+      if (salePrice !== undefined) {
+        if (salePrice >= product.price) {
+          return res.status(400).json({ message: "Giá sale phải nhỏ hơn giá gốc!" });
+        }
+        product.salePrice = salePrice;
+        product.isOnSale = isOnSale === undefined ? true : isOnSale;
+      } else {
+        // Nếu không truyền salePrice, chỉ cập nhật trạng thái sale
+        product.isOnSale = !!isOnSale;
+      }
+      await product.save();
+      res.json({ message: "Cập nhật giá sale thành công!", product });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
     }
   }
 );

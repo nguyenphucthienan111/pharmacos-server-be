@@ -134,6 +134,15 @@ const productSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    salePrice: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+    isOnSale: {
+      type: Boolean,
+      default: false,
+    },
     stockQuantity: {
       type: Number,
       required: true,
