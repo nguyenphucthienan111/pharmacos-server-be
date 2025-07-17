@@ -61,7 +61,9 @@ function applyAutoSale(product) {
   const today = new Date();
   const expiry = new Date(product.expiryDate);
   if (isNaN(expiry.getTime())) return product;
-  const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.ceil(
+    (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
   if (diffDays <= 30) {
     // Nếu đã có salePrice nhỏ hơn 10% thì giữ nguyên
     const tenPercent = Math.round(product.price * 0.9);
@@ -71,7 +73,10 @@ function applyAutoSale(product) {
     }
   } else {
     // Hết thời gian sale tự động
-    if (product.isOnSale && product.salePrice === Math.round(product.price * 0.9)) {
+    if (
+      product.isOnSale &&
+      product.salePrice === Math.round(product.price * 0.9)
+    ) {
       product.isOnSale = false;
       product.salePrice = null;
     }
@@ -260,7 +265,9 @@ router.get("/", async (req, res) => {
 
     const total = await Product.countDocuments(filter);
     // Áp dụng auto sale cho từng sản phẩm
-    const productsWithAutoSale = products.map(p => applyAutoSale(p.toObject ? p.toObject() : p));
+    const productsWithAutoSale = products.map((p) =>
+      applyAutoSale(p.toObject ? p.toObject() : p)
+    );
     res.json({
       success: true,
       data: {
@@ -895,17 +902,21 @@ router.post("/:id/reviews", authenticateToken, async (req, res) => {
     );
 
     if (existingReviewIndex !== -1) {
+      // Đã review rồi, không cho phép POST nữa
       // Update existing review
-      product.reviews[existingReviewIndex].rating = rating;
-      product.reviews[existingReviewIndex].comment = comment;
-      product.reviews[existingReviewIndex].createdAt = new Date();
+      // product.reviews[existingReviewIndex].rating = rating;
+      // product.reviews[existingReviewIndex].comment = comment;
+      // product.reviews[existingReviewIndex].createdAt = new Date();
 
-      await product.save();
+      // await product.save();
 
-      return res.json({
-        success: true,
-        data: product.reviews[existingReviewIndex],
-        message: "Review updated successfully",
+      // return res.json({
+      //   success: true,
+      //   data: product.reviews[existingReviewIndex],
+      //   message: "Review updated successfully",
+      return res.status(409).json({
+        success: false,
+        message: "You have already reviewed this product.",
       });
     } else {
       // Create new review
@@ -1631,11 +1642,17 @@ router.patch(
       const expiry = new Date(product.expiryDate);
       const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
       if (diffDays > 30) {
-        return res.status(400).json({ message: "Chỉ được sale khi sản phẩm còn dưới 30 ngày hết hạn!" });
+        return res
+          .status(400)
+          .json({
+            message: "Chỉ được sale khi sản phẩm còn dưới 30 ngày hết hạn!",
+          });
       }
       if (salePrice !== undefined) {
         if (salePrice >= product.price) {
-          return res.status(400).json({ message: "Giá sale phải nhỏ hơn giá gốc!" });
+          return res
+            .status(400)
+            .json({ message: "Giá sale phải nhỏ hơn giá gốc!" });
         }
         product.salePrice = salePrice;
         product.isOnSale = isOnSale === undefined ? true : isOnSale;
