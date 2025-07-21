@@ -160,9 +160,9 @@ router.post("/create", authenticateToken, async (req, res) => {
 
           // If payment is still valid (status PENDING), return existing link
           if (paymentInfo && paymentInfo.status === "PENDING") {
-            return res.status(400).json({
-              success: false,
-              message: "A pending payment already exists for this order",
+            return res.status(200).json({
+              success: true,
+              message: "A pending payment already exists for this order. Returning existing payment link.",
               data: {
                 paymentUrl: existingPayment.paymentUrl,
                 paymentId: existingPayment._id,
@@ -172,6 +172,7 @@ router.post("/create", authenticateToken, async (req, res) => {
                     (existingPayment.paymentTimeout - Date.now()) / 1000
                   )
                 ), // seconds left
+                expiresAt: existingPayment.paymentTimeout,
               },
             });
           }
@@ -283,7 +284,7 @@ router.post("/create", authenticateToken, async (req, res) => {
         timeLeft: Math.max(
           0,
           Math.floor((payment.paymentTimeout - Date.now()) / 1000)
-        ), // seconds left
+        ), // seconds left (now always max 120)
         expiresAt: payment.paymentTimeout,
       },
     });
@@ -718,9 +719,9 @@ router.get("/status/:orderId", authenticateToken, async (req, res) => {
         timeLeft: isExpired
           ? 0
           : Math.max(
-              0,
-              Math.floor((payment.paymentTimeout - Date.now()) / 1000)
-            ),
+            0,
+            Math.floor((payment.paymentTimeout - Date.now()) / 1000)
+          ),
         paymentUrl: isExpired ? null : payment.paymentUrl,
         expiresAt: payment.paymentTimeout,
       },

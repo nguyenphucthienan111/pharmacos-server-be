@@ -76,8 +76,8 @@ paymentSchema.pre("save", function (next) {
     this.isNew &&
     (this.paymentMethod === "online" || this.paymentMethod === "bank")
   ) {
-    // Set timeout to 5 minutes from now
-    this.paymentTimeout = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    // Set timeout to 2 minutes from now
+    this.paymentTimeout = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
   }
   next();
 });
